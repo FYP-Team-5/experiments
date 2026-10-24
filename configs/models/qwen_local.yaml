@@ -1,0 +1,9 @@
+# configs/models/qwen_local.yaml
+model:
+  base_model_id: "Qwen/Qwen3.5-2B"  # Lightweight model for instant local CPU testing
+  adapter_id: null
+  torch_dtype: "float32"
+  device_map: "cpu"
+
+quantization:
+  load_in_4bit: false                           # Disable bitsandbytes locally

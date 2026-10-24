@@ -1,0 +1,41 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+venv/
+ENV/
+env/
+conda/
+.conda/
+
+# IDE & Editor Settings
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Data & Large Files
+# Ignore all data contents except the initial raw CSV file
+data/synthetic/
+data/raw/*
+!data/raw/training_data_moh_eng_rubrics.csv
+
+# Outputs, Logs, & Experiment Results
+outputs/
+logs/
+
+# Model Caches & Hugging Face Checkpoints
+.cache/
+huggingface/
+transformers_cache/
+*.bin
+*.pt
+*.safetensors
+*.pth
+
+# Jupyter Notebook Checkpoints
+.ipynb_checkpoints/

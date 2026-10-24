@@ -1,0 +1,13 @@
+defaults:
+  - configs/base.yaml
+  - configs/models/qwen3.5-9b-qloroa.yaml
+
+experiment_name: "exp_02_answer_rubric_grade"
+
+prompt:
+  feedback_path: "prompts/feedback/answer_rubric_grade_v1.txt"
+  grading_path: "prompts/grading/grading_v1.txt"
+  verification_path: "prompts/verification/consistency_v1.txt"
+
+data:
+  input_path: "data/processed/data.jsonl"

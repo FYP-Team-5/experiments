@@ -1,0 +1,6 @@
+bitsandbytes>=0.46.1
+omegaconf
+peft
+pyyaml
+torch>=2.0.0
+transformers

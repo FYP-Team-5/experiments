@@ -1,0 +1,8 @@
+experiment:
+  seed: 42
+  output_dir: "outputs"
+
+decoding:
+  temperature: 0.1
+  top_p: 0.95
+  max_new_tokens: 512
