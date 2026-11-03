@@ -231,6 +231,7 @@ def run_pipeline(config: Dict[str, Any], output_run_dir: str,
         print(f"Seed {seed}: {len(indices)} test rows", flush=True)
     run_indices = sorted(set().union(*test_indices_by_seed.values()))
 
+    os.makedirs(output_run_dir, exist_ok=True)
     records_path = os.path.join(output_run_dir, "records.jsonl")
     completed = set(load_records(records_path))
     pending = [index for index in run_indices if index not in completed]

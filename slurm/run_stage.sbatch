@@ -10,6 +10,7 @@
 #SBATCH --time=06:00:00
 #SBATCH --partition=project
 #SBATCH --account=cs480
+#SBATCH --qos=cs480qos
 
 # Activate cluster environment and HuggingFace cache paths
 source slurm/env_setup.sh

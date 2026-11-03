@@ -29,9 +29,20 @@ PYTHONPATH=. python scripts/run_stage.py --config configs/experiments/cmp_gradin
 PYTHONPATH=. python scripts/run_stage.py --config configs/experiments/cmp_grading_qlora.yaml \
     --output_dir outputs/cmp_grading_qlora/20261103_120000
 
-# Every experiment in a list, on the cluster
+# The comparison on the cluster: each config is its own job, one after another.
+# Each job queues the next when it starts, so at most two jobs are submitted at
+# once (the CS480G3 limit). Results go to outputs/comparison/<config>/;
+# resubmitting resumes unfinished configs and skips finished ones quickly.
+bash slurm/submit_comparison.sh                          # slurm/comparison.txt
+CONFIG=configs/experiments/cmp_grading_qlora.yaml sbatch --export=ALL slurm/run_one.sbatch   # one config
+
+# Every experiment in a list, in a single job
 sbatch slurm/run_stage.sbatch                                                  # slurm/experiments.txt
 sbatch --export=ALL,EXPERIMENT_LIST_FILE=slurm/comparison.txt slurm/run_stage.sbatch
+
+# Compare finished runs (no GPU needed): paired differences per seed with
+# bootstrap intervals by question, McNemar tests, and cost per agent
+python scripts/compare.py                                # every run in outputs/comparison/
 
 # Score an existing records file, including the notebooks' JSONL output
 python scripts/evaluate.py --records path/to/records.jsonl --out path/to/report
@@ -64,6 +75,8 @@ Each run writes to `outputs/<experiment_name>/<timestamp>/`:
 | `metrics_seed_summary.csv` | Mean and std of each metric across seeds |
 | `agent_stats_by_seed.csv` | Agreement, re-grade and change rates, verifier pass rates before and after rewrites, and minutes per agent |
 
+`scripts/compare.py` writes `report.md`, `grading_summary.csv`, `grading_paired.csv`, `feedback_paired.csv` and `agent_stats.csv` to `outputs/comparison/report/`.
+
 `calculate_metrics` in `src/gfv/metrics.py` is the function from the qlora notebooks. Rescoring the notebooks' JSONL output with `scripts/evaluate.py` reproduces their `metrics_by_seed.csv`.
 
 ## Layout
@@ -76,6 +89,6 @@ Each run writes to `outputs/<experiment_name>/<timestamp>/`:
 | `prompts/` | System prompts and templates. Placeholders are `{name}`; other braces are left as they are |
 | `src/gfv/` | Data, model wrapper, parsers, metrics, pipeline and one module per stage |
 | `notebooks/multi_agent_vote/` | The original grade-voting notebooks and their results, from the qlora repo's `feat/multi-agent` branch |
-| `scripts/` | Run one experiment, run a list, convert the CSV, score a records file |
-| `slurm/` | Cluster job and experiment lists |
+| `scripts/` | Run one experiment, run a list, convert the CSV, score a records file, compare runs |
+| `slurm/` | Cluster jobs (`run_one.sbatch` per config, `run_stage.sbatch` per list), `submit_comparison.sh`, experiment lists |
 | `tests/` | Pipeline tests with a fake model, and prompt checks against the adapters' training prompts |
