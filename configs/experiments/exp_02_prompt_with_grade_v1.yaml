@@ -1,13 +1,19 @@
 defaults:
   - configs/base.yaml
-  - configs/models/qwen3.5-9b-qloroa.yaml
 
 experiment_name: "exp_02_answer_rubric_grade"
 
-prompt:
-  feedback_path: "prompts/feedback/answer_rubric_grade_v1.txt"
-  grading_path: "prompts/grading/grading_v1.txt"
-  verification_path: "prompts/verification/consistency_v1.txt"
+models:
+  grading: "configs/models/qwen3.5-9b-qlora.yaml"
+  feedback: "configs/models/qwen3.5-9b.yaml"
+  verification: "configs/models/qwen3.5-9b.yaml"
 
-data:
-  input_path: "data/processed/data.jsonl"
+stages:
+  feedback:
+    # Feedback from the rubric and the grader's score.
+    system_prompt_path: "prompts/feedback/system_v1.txt"
+    template_path: "prompts/feedback/answer_rubric_grade_v1.txt"
+    decoding:
+      max_new_tokens: 512
+  verification:
+    enabled: true

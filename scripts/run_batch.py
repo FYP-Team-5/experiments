@@ -59,7 +59,8 @@ def main():
         # 2. Setup timestamped run output directory: outputs/<exp_name>/<timestamp>/
         exp_name = config.get("experiment_name") or os.path.splitext(os.path.basename(config_path))[0]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_run_dir = os.path.join("outputs", exp_name, timestamp)
+        output_root = config.get("experiment", {}).get("output_dir", "outputs")
+        output_run_dir = os.path.join(output_root, exp_name, timestamp)
         os.makedirs(output_run_dir, exist_ok=True)
 
         # 3. Save exact resolved config for experiment auditing

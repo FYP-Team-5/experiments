@@ -1,8 +1,48 @@
 experiment:
-  seed: 42
+  # Question-level 80/10/10 splits, the same as the qlora notebooks. Every row
+  # in any seed's test split is processed once; each seed is scored on its own.
+  seeds: [42, 123, 2026]
   output_dir: "outputs"
+  batch_size: 8                 # halved automatically after a CUDA out-of-memory error
+  enable_thinking: false        # every Qwen3.5 run in the qlora repo is non-thinking
 
-decoding:
-  temperature: 0.1
-  top_p: 0.95
-  max_new_tokens: 512
+data:
+  input_path: "data/processed/data.jsonl"
+
+stages:
+  grading:
+    system_prompt_path: "prompts/grading/grading_v1.txt"   # the grading adapter's training prompt
+    decoding:
+      do_sample: false
+      max_new_tokens: 128
+
+  # Grade voting (notebooks/multi_agent_vote/): an evaluation agent re-grades,
+  # a third grade breaks disagreements, and each criterion takes the majority.
+  # The evaluator samples; with greedy decoding it would always agree with the grader.
+  # models.voting defaults to models.grading.
+  voting:
+    enabled: false
+    decoding:
+      do_sample: true
+      temperature: 0.7
+      max_new_tokens: 128
+
+  feedback:
+    enabled: true
+    # The feedback adapter's training prompt (feedback/qlora_feedback_qwen3.5-9B.ipynb).
+    system_prompt_path: "prompts/feedback/key_points_system_v1.txt"
+    template_path: "prompts/feedback/key_points_v1.txt"
+    decoding:
+      do_sample: false
+      max_new_tokens: 320
+
+  # Feedback verification: an LLM judge checks that score and feedback are
+  # consistent. Rejected feedback is rewritten with the judge's notes, up to
+  # max_regenerations times.
+  verification:
+    enabled: false
+    template_path: "prompts/verification/consistency_v1.txt"
+    max_regenerations: 0
+    decoding:
+      do_sample: false
+      max_new_tokens: 512

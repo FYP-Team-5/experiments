@@ -1,0 +1,18 @@
+# Feedback comparison, feedback adapter: feedback on the QLoRA grader's
+# marks, checked by the verifier and rewritten up to twice if rejected.
+# feedback_initial (before verification) and feedback (after) are both kept,
+# so one run covers "no verifier" and "verifier + regenerate".
+defaults:
+  - configs/base.yaml
+
+experiment_name: "cmp_feedback_adapter"
+
+models:
+  grading: "configs/models/qwen3.5-9b-qlora.yaml"
+  feedback: "configs/models/qwen3.5-9b-feedback-qlora.yaml"
+  verification: "configs/models/qwen3.5-9b.yaml"
+
+stages:
+  verification:
+    enabled: true
+    max_regenerations: 2

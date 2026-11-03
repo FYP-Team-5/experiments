@@ -1,0 +1,15 @@
+# Grading comparison, fine-tuned grader: "single" vs "vote" with the grading
+# QLoRA adapter as both grading and evaluation agent.
+defaults:
+  - configs/base.yaml
+
+experiment_name: "cmp_grading_qlora"
+
+models:
+  grading: "configs/models/qwen3.5-9b-qlora.yaml"
+
+stages:
+  voting:
+    enabled: true
+  feedback:
+    enabled: false        # grading only; feedback is compared in cmp_feedback_*

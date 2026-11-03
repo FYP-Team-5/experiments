@@ -54,7 +54,8 @@ def load_and_merge_config(config_path: str) -> DictConfig:
 def main():
     parser = argparse.ArgumentParser(description="Run GFV pipeline stage")
     parser.add_argument("--config", type=str, required=True, help="Path to experiment config YAML")
-    parser.add_argument("--output_dir", type=str, default=None, help="Optional override for output directory")
+    parser.add_argument("--output_dir", type=str, default=None,
+                        help="Optional override for output directory; reuse a run's directory to resume it")
     args = parser.parse_args()
 
     # Load, recursively merge defaults, and resolve model references
@@ -65,7 +66,8 @@ def main():
     # Output directory matching project layout
     exp_name = config.get("experiment_name") or os.path.splitext(os.path.basename(args.config))[0]
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_run_dir = args.output_dir or os.path.join("outputs", exp_name, timestamp)
+    output_root = config.get("experiment", {}).get("output_dir", "outputs")
+    output_run_dir = args.output_dir or os.path.join(output_root, exp_name, timestamp)
     os.makedirs(output_run_dir, exist_ok=True)
 
     # Save exact resolved config into run directory for auditability

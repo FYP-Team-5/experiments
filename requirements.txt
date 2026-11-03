@@ -1,6 +1,11 @@
+accelerate
 bitsandbytes>=0.46.1
+numpy
 omegaconf
+pandas
 peft
+pytest
 pyyaml
+scikit-learn
 torch>=2.0.0
 transformers

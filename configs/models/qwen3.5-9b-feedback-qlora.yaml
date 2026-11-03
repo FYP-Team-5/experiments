@@ -1,0 +1,11 @@
+model:
+  base_model_id: "Qwen/Qwen3.5-9B"        # HF Base Model Repo
+  adapter_id: "SmuFypTeam5/feedback"      # Feedback QLoRA adapter (feedback/qlora_feedback_qwen3.5-9B.ipynb)
+  torch_dtype: "bfloat16"                 # Precision for compute
+  device_map: "auto"
+
+quantization:
+  load_in_4bit: true                      # Quantize base model on load
+  bnb_4bit_compute_dtype: "bfloat16"
+  bnb_4bit_quant_type: "nf4"
+  bnb_4bit_use_double_quant: true         # as in the qlora training notebooks

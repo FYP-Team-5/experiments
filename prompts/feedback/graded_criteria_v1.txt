@@ -1,0 +1,13 @@
+Question:
+{question}
+
+Desired answer:
+{desired_answer}
+
+Student answer:
+{student_answer}
+
+Graded criteria:
+{graded_criteria}
+
+Final score: {score} / {max_score}

@@ -14,7 +14,8 @@
 # Activate cluster environment and HuggingFace cache paths
 source slurm/env_setup.sh
 
-EXPERIMENT_LIST_FILE="slurm/experiments.txt"
+# Override with: sbatch --export=ALL,EXPERIMENT_LIST_FILE=slurm/comparison.txt slurm/run_stage.sbatch
+EXPERIMENT_LIST_FILE="${EXPERIMENT_LIST_FILE:-slurm/experiments.txt}"
 
 echo "Submitting batch run reading from: ${EXPERIMENT_LIST_FILE}"
 

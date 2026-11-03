@@ -1,0 +1,13 @@
+Question:
+{question}
+
+Reference answer:
+{desired_answer}
+
+Student answer:
+{student_answer}
+
+Key points:
+{key_points}
+
+Key points met: {met_count} of {criteria_count}

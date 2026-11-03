@@ -4,19 +4,26 @@ defaults:
 
 experiment_name: "exp_local_test"
 
+experiment:
+  seeds: [42]
+  batch_size: 2
+
 models:
   grading: "configs/models/qwen_local.yaml"
   feedback: "configs/models/qwen_local.yaml"
   verification: "configs/models/qwen_local.yaml"
 
-prompt:
-  grading_path: "prompts/grading/grading_v1.txt"
-  feedback_path: "prompts/feedback/answer_rubric_v1.txt"
-  verification_path: "prompts/verification/consistency_v1.txt"
-
 data:
   input_path: "data/processed/data_small.jsonl"    # Only 5 samples
 
-decoding:
-  max_new_tokens: 128
-  temperature: 0.1
+stages:
+  voting:
+    enabled: true
+  feedback:
+    decoding:
+      max_new_tokens: 128
+  verification:
+    enabled: true
+    max_regenerations: 1
+    decoding:
+      max_new_tokens: 128

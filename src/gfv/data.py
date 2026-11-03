@@ -15,6 +15,21 @@ class Sample:
     ground_truth_score: Optional[float] = None
     ground_truth_feedback: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
+    # Row position in the JSONL file. It equals `dataset_index` (the CSV row
+    # position) in the qlora notebooks, so records from both can be joined.
+    index: int = -1
+
+    @property
+    def criteria(self) -> List[str]:
+        return list(self.metadata["raw_criteria"])
+
+    @property
+    def criteria_scores(self) -> List[int]:
+        return [int(x) for x in self.metadata["criteria_scores"]]
+
+    @property
+    def criteria_max_scores(self) -> List[int]:
+        return [int(x) for x in self.metadata["criteria_max_scores"]]
 
 
 def load_jsonl(filepath: str) -> List[Sample]:
@@ -35,39 +50,51 @@ def load_jsonl(filepath: str) -> List[Sample]:
                     ground_truth_score=item.get("ground_truth_score"),
                     ground_truth_feedback=item.get("ground_truth_feedback", ""),
                     metadata=item.get("metadata"),
+                    index=len(samples),
                 )
             )
     return samples
 
 
-def load_test_split(filepath: str, seed: int = 42, split_ratio: tuple = (0.80, 0.10, 0.10)) -> List[Sample]:
+def question_splits(samples: List[Sample], seed: int = 42,
+                    split_ratio: tuple = (0.80, 0.10, 0.10)) -> Dict[str, List[Sample]]:
     """
-    Loads samples from JSONL and returns ONLY the test split using 
-    deterministic question-level grouping to prevent data leakage.
+    Deterministic question-level 80/10/10 split, identical to the one in the
+    qlora notebooks: unique stripped questions are shuffled with `seed`, and
+    every row goes to the split of its question.
     """
-    all_samples = load_jsonl(filepath)
-
-    # Extract ordered question keys
-    question_keys = [s.question.strip() for s in all_samples]
+    question_keys = [s.question.strip() for s in samples]
     unique_questions = list(dict.fromkeys(question_keys))
 
-    # Shuffle unique question IDs with fixed seed
     rng = random.Random(seed)
     rng.shuffle(unique_questions)
 
-    # Compute 80 / 10 / 10 boundary cutoffs
     n_questions = len(unique_questions)
     train_end = int(n_questions * split_ratio[0])
     validation_end = train_end + int(n_questions * split_ratio[1])
+    split_of = {}
+    for position, question in enumerate(unique_questions):
+        split_of[question] = (
+            "train" if position < train_end
+            else "validation" if position < validation_end
+            else "test"
+        )
 
-    # Isolate test questions (the remaining 10%)
-    test_questions = set(unique_questions[validation_end:])
+    splits = {"train": [], "validation": [], "test": []}
+    for sample, question in zip(samples, question_keys):
+        splits[split_of[question]].append(sample)
+    return splits
 
-    # Select test samples
-    test_samples = [s for s in all_samples if s.question.strip() in test_questions]
 
+def load_test_split(filepath: str, seed: int = 42, split_ratio: tuple = (0.80, 0.10, 0.10)) -> List[Sample]:
+    """
+    Loads samples from JSONL and returns ONLY the test split using
+    deterministic question-level grouping to prevent data leakage.
+    """
+    test_samples = question_splits(load_jsonl(filepath), seed, split_ratio)["test"]
+    n_questions = len({s.question.strip() for s in test_samples})
     print(
         f"Loaded test split: {len(test_samples)} samples / "
-        f"{len(test_questions)} unique questions (Seed: {seed})"
+        f"{n_questions} unique questions (Seed: {seed})"
     )
     return test_samples

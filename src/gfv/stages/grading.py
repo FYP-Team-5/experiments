@@ -1,8 +1,8 @@
-import json
-import re
-from typing import List, Dict, Any, Union
-from src.gfv.llm import LLMWrapper
+from typing import List, Dict, Any, Optional, Tuple
+from src.gfv.data import Sample
+from src.gfv.parsing import parse_prediction
 from src.gfv.prompts import PromptLoader
+
 
 def make_prompt(system_prompt: str, question: str, desired_answer: str, student_answer: str, criteria: List[str]) -> List[Dict[str, str]]:
     """Builds the exact prompt structure used during model training."""
@@ -19,80 +19,51 @@ def make_prompt(system_prompt: str, question: str, desired_answer: str, student_
     ]
 
 
+def weighted_score(criterion_scores: Optional[List[int]], criterion_maximums: List[int]) -> Optional[float]:
+    if criterion_scores is None:
+        return None
+    return float(sum(score * maximum for score, maximum in zip(criterion_scores, criterion_maximums)))
+
+
 class GradingStage:
-    """Execution stage for evaluating student answers against a list of rubric criteria."""
+    """Execution stage for evaluating student answers against a list of rubric criteria.
 
-    def __init__(self, llm: LLMWrapper, prompt_path: str, decoding_params: Dict[str, Any]):
+    The voting stage reuses this class as its evaluation agent, with its own
+    model and decoding settings.
+    """
+
+    def __init__(self, llm, prompt_path: str, decoding_params: Dict[str, Any], enable_thinking: bool = False):
         self.llm = llm
-        self.system_prompt = PromptLoader.load_prompt_template(prompt_path)
+        self.system_prompt = PromptLoader.load_prompt_template(prompt_path).strip()
         self.decoding_params = decoding_params
+        self.enable_thinking = enable_thinking
 
-    def format_input_prompt(self, sample) -> str:
-        """
-        Converts the sample's data into the model's chat template string.
-        """
-        # Retrieve criteria as a list (from metadata or parsed rubric string)
-        if isinstance(sample.rubric, list):
-            criteria = sample.rubric
-        elif getattr(sample, "metadata", None) and "raw_criteria" in sample.metadata:
-            criteria = sample.metadata["raw_criteria"]
-        else:
-            # Fallback: split rubric text into lines if passed as a formatted string
-            criteria = [line.strip("- ") for line in sample.rubric.split("\n") if line.strip()]
-
-        messages = make_prompt(
+    def messages(self, sample: Sample) -> List[Dict[str, str]]:
+        # The raw (unstripped) text is what the grading adapter was trained on.
+        return make_prompt(
             system_prompt=self.system_prompt,
             question=sample.question,
             desired_answer=sample.desired_answer,
             student_answer=sample.student_answer,
-            criteria=criteria
+            criteria=sample.criteria,
         )
 
-        # Apply model tokenizer's chat template if available, otherwise join text
-        if hasattr(self.llm.tokenizer, "apply_chat_template"):
-            return self.llm.tokenizer.apply_chat_template(
-                messages, 
-                tokenize=False, 
-                add_generation_prompt=True
-            )
-        else:
-            return f"System: {self.system_prompt}\n\nUser:\n{messages[1]['content']}\n\nAssistant:"
+    def run_batch(self, samples: List[Sample]) -> Tuple[List[Dict[str, Any]], float]:
+        """Grades every sample. Each result has `valid`, `scores`, `error`, `final_score` and `raw_output`."""
+        raw_outputs, elapsed = self.llm.generate_batch(
+            [self.messages(sample) for sample in samples], self.decoding_params, self.enable_thinking
+        )
+        results = []
+        for sample, raw_output in zip(samples, raw_outputs):
+            parsed = parse_prediction(raw_output, len(sample.criteria))
+            results.append({
+                **parsed,
+                "final_score": weighted_score(parsed["scores"], sample.criteria_max_scores),
+                "raw_output": raw_output,
+            })
+        return results, elapsed
 
-    def run(self, sample) -> Dict[str, Any]:
-        """
-        Runs the model and extracts the criteria evaluation array [0, 1, 0, ...].
-        """
-        formatted_prompt = self.format_input_prompt(sample)
-        raw_output = self.llm.generate(formatted_prompt, self.decoding_params)
-
-        # Parse JSON array output safely
-        scores = self._parse_json_array(raw_output)
-
-        return {
-            "raw_output": raw_output,
-            "criteria_scores": scores,
-            "total_score": sum(scores) if isinstance(scores, list) else 0.0
-        }
-
-    @staticmethod
-    def _parse_json_array(text: str) -> Union[List[int], None]:
-        """Extracts and parses a JSON list of 0s and 1s from the raw response string."""
-        text = text.strip()
-        
-        # 1. Direct JSON parse
-        try:
-            res = json.loads(text)
-            if isinstance(res, list):
-                return [int(x) for x in res]
-        except Exception:
-            pass
-
-        # 2. Regex fallback if model included markdown formatting or text around array
-        match = re.search(r"\[\s*([01]\s*,\s*)*[01]\s*\]", text)
-        if match:
-            try:
-                return json.loads(match.group(0))
-            except Exception:
-                pass
-
-        return []
+    def run(self, sample: Sample) -> Dict[str, Any]:
+        """Runs the model and extracts the criteria evaluation array [0, 1, 0, ...]."""
+        results, _ = self.run_batch([sample])
+        return results[0]

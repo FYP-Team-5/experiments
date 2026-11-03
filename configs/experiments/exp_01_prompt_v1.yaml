@@ -8,10 +8,12 @@ models:
   feedback: "configs/models/qwen3.5-9b.yaml"
   verification: "configs/models/qwen3.5-9b.yaml"
 
-prompt:
-  feedback_path: "prompts/feedback/answer_rubric_v1.txt"
-  grading_path: "prompts/grading/grading_v1.txt"
-  verification_path: "prompts/verification/consistency_v1.txt"
-
-data:
-  input_path: "data/processed/data.jsonl"
+stages:
+  feedback:
+    # Feedback from the rubric alone; this prompt does not see the grade.
+    system_prompt_path: "prompts/feedback/system_v1.txt"
+    template_path: "prompts/feedback/answer_rubric_v1.txt"
+    decoding:
+      max_new_tokens: 512
+  verification:
+    enabled: true
