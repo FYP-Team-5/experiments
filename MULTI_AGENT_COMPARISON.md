@@ -7,7 +7,7 @@ There are two multi-agent implementations, and they couldn't be compared. This f
 Both methods now run in this repo's pipeline: grade voting is `stages.voting`, feedback verification is `stages.verification`. The notebooks and their results were moved here from the qlora repo's `feat/multi-agent` branch, under `notebooks/multi_agent_vote/`, with their author kept.
 
 - **Done:** A1–A13, B1–B3 (in this pipeline; the notebooks themselves are unchanged), C1–C3, in C4 the grading metrics, the verifier's pass rates and the time per agent, and C5 (`scripts/compare.py`). Rescoring the notebooks' JSONL output with `scripts/evaluate.py` reproduces their `metrics_by_seed.csv` exactly (all 3 seeds, single and vote). `tests/` runs the pipeline end to end with a fake model.
-- **Still to do:** run the four `cmp_*` configs on the GPU cluster (`bash slurm/submit_comparison.sh`), then `python scripts/compare.py`; score the feedback with the 27B judge (B4, C4).
+- **Still to do:** run the four `cmp_*` configs on the GPU cluster (`bash slurm/submit.sh <config>`, one job each), then `python scripts/compare.py`; score the feedback with the 27B judge (B4, C4).
 
 On the notebook's own sampled run, `scripts/compare.py` already finds that voting changes no grading metric significantly on any seed: every 95% interval includes 0, and McNemar's p is between 0.55 and 1.0.
 

@@ -29,12 +29,14 @@ PYTHONPATH=. python scripts/run_stage.py --config configs/experiments/cmp_gradin
 PYTHONPATH=. python scripts/run_stage.py --config configs/experiments/cmp_grading_qlora.yaml \
     --output_dir outputs/cmp_grading_qlora/20261103_120000
 
-# The comparison on the cluster: each config is its own job, one after another.
-# Each job queues the next when it starts, so at most two jobs are submitted at
-# once (the CS480G3 limit). Results go to outputs/comparison/<config>/;
-# resubmitting resumes unfinished configs and skips finished ones quickly.
-bash slurm/submit_comparison.sh                          # slurm/comparison.txt
-CONFIG=configs/experiments/cmp_grading_qlora.yaml sbatch --export=ALL slurm/run_one.sbatch   # one config
+# The comparison on the cluster: submit each config as its own job. The
+# CS480G3 account allows 2 submitted jobs, so submit two, then the next one
+# after one finishes. Results go to outputs/comparison/<config>/;
+# resubmitting a config resumes it.
+bash slurm/submit.sh cmp_grading_base
+bash slurm/submit.sh cmp_grading_qlora
+bash slurm/submit.sh cmp_feedback_base        # after one of the above finishes
+bash slurm/submit.sh cmp_feedback_adapter
 
 # Every experiment in a list, in a single job
 sbatch slurm/run_stage.sbatch                                                  # slurm/experiments.txt
@@ -90,5 +92,5 @@ Each run writes to `outputs/<experiment_name>/<timestamp>/`:
 | `src/gfv/` | Data, model wrapper, parsers, metrics, pipeline and one module per stage |
 | `notebooks/multi_agent_vote/` | The original grade-voting notebooks and their results, from the qlora repo's `feat/multi-agent` branch |
 | `scripts/` | Run one experiment, run a list, convert the CSV, score a records file, compare runs |
-| `slurm/` | Cluster jobs (`run_one.sbatch` per config, `run_stage.sbatch` per list), `submit_comparison.sh`, experiment lists |
+| `slurm/` | Cluster jobs (`run_one.sbatch` per config, `run_stage.sbatch` per list), `submit.sh` to submit one config, experiment lists |
 | `tests/` | Pipeline tests with a fake model, and prompt checks against the adapters' training prompts |
