@@ -75,7 +75,7 @@ def make_config(**stage_overrides):
                      "system_prompt_path": "prompts/feedback/key_points_system_v1.txt",
                      "template_path": "prompts/feedback/key_points_v1.txt"},
         "verification": {"enabled": True, "max_regenerations": 2,
-                         "template_path": "prompts/verification/consistency_v1.txt"},
+                         "template_path": "prompts/verification/consistency_v2.txt"},
     }
     for name, override in stage_overrides.items():
         stages[name] = {**stages[name], **override}
@@ -125,6 +125,7 @@ def test_full_pipeline_records_and_metrics(tmp_path):
     stats = pd.read_csv(tmp_path / "agent_stats_by_seed.csv", index_col=0)
     assert stats.loc["mean", "verifier_pass_rate_initial"] == 0
     assert stats.loc["mean", "verifier_pass_rate_final"] == 1
+    assert stats.loc["mean", "verifier_unreadable_rate_final"] == 0
 
 
 def test_resume_skips_completed_rows(tmp_path):
@@ -160,6 +161,28 @@ def test_max_regenerations_zero_only_audits(tmp_path):
     record = read_records(tmp_path)[0]
     assert record["feedback"] == "First feedback." and record["feedback_revisions"] == 0
     assert record["verifier"]["is_consistent"] is False
+
+
+class TruncatedVerifierLLM(FakeLLM):
+    """The verifier reasons in prose and runs out of tokens before the JSON."""
+
+    def generate_batch(self, message_lists, decoding, enable_thinking=False):
+        replies, seconds = super().generate_batch(message_lists, decoding, enable_thinking)
+        return [
+            "Let me check the rubric first. The student says" if "[GENERATED FEEDBACK START]" in m[-1]["content"]
+            else reply
+            for m, reply in zip(message_lists, replies)
+        ], seconds
+
+
+def test_unreadable_verdict_counts_as_fail(tmp_path):
+    run_pipeline(make_config(), str(tmp_path), llm_factory=TruncatedVerifierLLM)
+    record = read_records(tmp_path)[0]
+    # No notes to revise with, so the feedback is kept as it was.
+    assert record["verifier"]["valid"] is False and record["feedback_revisions"] == 0
+    stats = pd.read_csv(tmp_path / "agent_stats_by_seed.csv", index_col=0)
+    assert stats.loc["mean", "verifier_pass_rate_final"] == 0
+    assert stats.loc["mean", "verifier_unreadable_rate_initial"] == 1
 
 
 def test_resolve_grades():

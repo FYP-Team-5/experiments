@@ -30,7 +30,7 @@ def main():
     }
     output_dir = args.out or os.path.dirname(os.path.abspath(args.records))
     os.makedirs(output_dir, exist_ok=True)
-    write_reports(load_records(args.records), test_indices_by_seed, output_dir)
+    write_reports(load_records(args.records), test_indices_by_seed, samples, output_dir)
     print(f"Wrote metrics to {output_dir}")
 
 

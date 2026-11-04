@@ -7,7 +7,12 @@ There are two multi-agent implementations, and they couldn't be compared. This f
 Both methods now run in this repo's pipeline: grade voting is `stages.voting`, feedback verification is `stages.verification`. The notebooks and their results were moved here from the qlora repo's `feat/multi-agent` branch, under `notebooks/multi_agent_vote/`, with their author kept.
 
 - **Done:** A1–A13, B1–B3 (in this pipeline; the notebooks themselves are unchanged), C1–C3, in C4 the grading metrics, the verifier's pass rates and the time per agent, and C5 (`scripts/compare.py`). Rescoring the notebooks' JSONL output with `scripts/evaluate.py` reproduces their `metrics_by_seed.csv` exactly (all 3 seeds, single and vote). `tests/` runs the pipeline end to end with a fake model.
-- **Still to do:** run the four `cmp_*` configs on the GPU cluster (`bash slurm/submit.sh <config>`, one job each), then `python scripts/compare.py`; score the feedback with the 27B judge (B4, C4).
+- **Run on the cluster (2026-11-04):** all four `cmp_*` configs. The verifier (`consistency_v1.txt`, 512 tokens) had two problems in the feedback runs:
+  - About 25% of its final verdicts could not be read. It reasoned inside its JSON and was cut off.
+  - It saw only the score, without the maximum or the criterion marks. It passed 69–75% of feedback on full-mark answers, but only 6–10% on zero-score answers and 1–3% on partial credit, mostly flagging `SCORE_FEEDBACK_MISMATCH` when the feedback named a missing point.
+
+  The verifier now uses `consistency_v2.txt` with 1024 tokens. It asks for the JSON only, and shows the score out of the maximum, each criterion's mark and the reference answer. An unreadable verdict now counts as a fail instead of being dropped.
+- **Still to do:** rerun the two feedback configs with the new verifier (RUNNING_ON_ORIGAMI.md, "Rerun the feedback configs"); score the feedback with the 27B judge (B4, C4).
 
 On the notebook's own sampled run, `scripts/compare.py` already finds that voting changes no grading metric significantly on any seed: every 95% interval includes 0, and McNemar's p is between 0.55 and 1.0.
 
@@ -119,7 +124,7 @@ On this branch, `records.jsonl` holds one record per row, without `split_seed`: 
 
 ### C4. Metrics
 
-- **Grading:** the 12 metrics from `calculate_metrics` (invalid rate, exact match, per-criterion accuracy, precision, recall, F1, final-score exact / within one / MAE / RMSE / Pearson / QWK), per seed and as mean ± std.
+- **Grading:** the metrics of the qlora Rubrics notebooks, in their order: examples, valid examples, recovered-output rate, invalid rate, exact match, per-criterion accuracy, precision, recall, F1, final-score exact / within one / MAE / RMSE / Pearson / QWK, then question count and the question-macro exact match, per-criterion accuracy and criterion F1. Per seed and as mean ± std. `calculate_metrics` in `src/gfv/metrics.py` implements them.
 - **Feedback:** the Qwen3.5-27B judge from `feedback/feedback_teacher_qwen3.5-27B.ipynb`: pass rate on all four judge checks, faithfulness, factual accuracy and the format checks. It already scored base 9B (79.7%) and the feedback adapter (89.7%) on the seed-42 test rows, so those numbers serve as the reference.
 - **Verifier:** how often it flags feedback the 27B judge also fails, and how often it flags feedback the judge passes. Without this check, its `is_consistent` verdict can't be trusted.
 - **Cost:** generation seconds per row for each agent.

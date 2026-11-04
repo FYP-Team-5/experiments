@@ -259,5 +259,5 @@ def run_pipeline(config: Dict[str, Any], output_run_dir: str,
                 position += len(batch)
                 print(f"Processed {position}/{len(pending)}", flush=True)
 
-    write_reports(load_records(records_path), test_indices_by_seed, output_run_dir)
+    write_reports(load_records(records_path), test_indices_by_seed, samples, output_run_dir)
     print(f"Pipeline finished. Output written to {output_run_dir}", flush=True)

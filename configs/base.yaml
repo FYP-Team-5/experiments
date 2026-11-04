@@ -39,10 +39,17 @@ stages:
   # Feedback verification: an LLM judge checks that score and feedback are
   # consistent. Rejected feedback is rewritten with the judge's notes, up to
   # max_regenerations times.
+  # v1 problems: the verifier reasoned at length inside the "description"
+  # strings and ran out of tokens before closing the JSON (about 25% of final
+  # verdicts unreadable), and it saw only "Score: 1", so it rejected nearly all
+  # feedback that named a missing point (1-3% pass on partial credit).
+  # v2 asks for the JSON only, with short descriptions, and shows the score out
+  # of the maximum, each criterion's mark and the reference answer.
+  # 1024 tokens leaves room for several issues.
   verification:
     enabled: false
-    template_path: "prompts/verification/consistency_v1.txt"
+    template_path: "prompts/verification/consistency_v2.txt"
     max_regenerations: 0
     decoding:
       do_sample: false
-      max_new_tokens: 512
+      max_new_tokens: 1024

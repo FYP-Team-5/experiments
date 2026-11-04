@@ -41,10 +41,10 @@ def main():
     runs = load_runs(paths)
     print("Runs:", ", ".join(runs))
 
-    summary, agent_stats = summaries(runs, test_indices_by_seed)
+    summary, agent_stats, metrics_by_seed = summaries(runs, test_indices_by_seed, samples)
     grading = compare_grading(grading_systems(runs), test_indices_by_seed, samples, args.bootstrap)
     feedback = compare_feedback(feedback_systems(runs), test_indices_by_seed, samples, args.bootstrap)
-    write_report(args.out, summary, agent_stats, grading, feedback, args.bootstrap)
+    write_report(args.out, summary, agent_stats, grading, feedback, args.bootstrap, metrics_by_seed)
     print(f"Wrote {os.path.join(args.out, 'report.md')}")
 
 

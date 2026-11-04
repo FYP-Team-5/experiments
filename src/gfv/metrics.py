@@ -1,20 +1,32 @@
 """Grading metrics, per seed and as mean ± std across seeds.
 
-`calculate_metrics` is the function from the qlora notebooks
-(notebooks/multi_agent_vote/), so records from this pipeline and from those
-notebooks are scored identically. Both write the same record fields:
-`dataset_index`, `ground_truth`, `prediction`, `valid`,
-`true_final_score`, `predicted_final_score` and `generation_seconds`.
+`calculate_metrics` follows the qlora repo's Rubrics notebooks
+(`evaluate_current_model` and `summarize_question_metrics` in
+Rubrics/Multi-seed/ and Rubrics/Qlora Comparison/): the same metrics, in the
+same order, with the same rules for invalid outputs. The 12 metrics shared
+with the multi-agent notebooks (notebooks/multi_agent_vote/) are computed as
+they compute them, so rescoring their JSONL output reproduces their
+metrics_by_seed.csv.
+
+Records need `dataset_index`, `ground_truth`, `prediction`, `valid`,
+`true_final_score`, `predicted_final_score` and `raw_output`; both this
+pipeline and the notebooks write them. `evaluate_records` adds each row's
+`question` from the dataset.
 """
 import json
 import os
-from typing import Any, Callable, Dict, List
+from collections import defaultdict
+from typing import Any, Callable, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-from sklearn.metrics import accuracy_score, cohen_kappa_score, f1_score, precision_score, recall_score
+from sklearn.metrics import accuracy_score, cohen_kappa_score, precision_recall_fscore_support
 
+# The Rubrics notebooks' column order: their 7-series metrics, then the question-level ones.
 METRIC_COLUMNS = [
+    "examples",
+    "valid_examples",
+    "recovered_output_rate",
     "invalid_output_rate",
     "exact_match_accuracy",
     "per_criterion_accuracy",
@@ -27,14 +39,74 @@ METRIC_COLUMNS = [
     "final_score_rmse",
     "final_score_pearson",
     "final_score_qwk",
+    "question_count",
+    "question_macro_exact_match_accuracy",
+    "question_macro_per_criterion_accuracy",
+    "question_macro_criterion_f1",
 ]
+
+
+def is_recovered(raw_output: Optional[str], valid: bool) -> bool:
+    """The Rubrics notebooks' `recovered`: a valid grade that had to be found inside the
+    output because the whole output was not a JSON array (e.g. extra text around it)."""
+    if not valid or raw_output is None:
+        return False
+    try:
+        json.loads(raw_output.strip())
+    except json.JSONDecodeError:
+        return True
+    return False
+
+
+def question_metrics(records: List[Dict[str, Any]]) -> Dict[str, float]:
+    """`summarize_question_metrics` from the Rubrics notebooks: every question has equal weight,
+    and an invalid output fails all of its criteria."""
+    grouped = defaultdict(list)
+    for record in records:
+        grouped[record["question"].strip()].append(record)
+    per_question = []
+    for answers in grouped.values():
+        tp = fp = fn = criterion_correct = criterion_total = 0
+        for answer in answers:
+            truth = answer["ground_truth"]
+            criterion_total += len(truth)
+            if not answer["valid"]:
+                # Missing positive decisions count as FN, missing negative decisions as FP.
+                fn += sum(label == 1 for label in truth)
+                fp += sum(label == 0 for label in truth)
+                continue
+            for actual, predicted in zip(truth, answer["prediction"]):
+                criterion_correct += int(actual == predicted)
+                tp += int(actual == predicted == 1)
+                fp += int(actual == 0 and predicted == 1)
+                fn += int(actual == 1 and predicted == 0)
+        denominator = 2 * tp + fp + fn
+        per_question.append({
+            "exact_match_accuracy": sum(
+                bool(a["valid"] and a["prediction"] == a["ground_truth"]) for a in answers
+            ) / len(answers),
+            "per_criterion_accuracy": criterion_correct / criterion_total,
+            # A perfectly graded all-negative question has F1 = 1 rather than undefined F1.
+            "criterion_f1": 2 * tp / denominator if denominator else 1.0,
+        })
+    count = len(per_question)
+
+    def macro(column):
+        return sum(row[column] for row in per_question) / count if count else 0.0
+
+    return {
+        "question_count": count,
+        "question_macro_exact_match_accuracy": macro("exact_match_accuracy"),
+        "question_macro_per_criterion_accuracy": macro("per_criterion_accuracy"),
+        "question_macro_criterion_f1": macro("criterion_f1"),
+    }
 
 
 def calculate_metrics(records: List[Dict[str, Any]]) -> Dict[str, float]:
     """Invalid outputs count as failures for exact-match and final-score accuracy.
     Criterion-level metrics, MAE, RMSE, Pearson and QWK use valid outputs only."""
     criterion_true, criterion_pred = [], []
-    exact_correct = invalid_count = final_score_exact = final_score_within_one = 0
+    exact_correct = invalid_count = recovered_count = final_score_exact = final_score_within_one = 0
     final_score_errors, y_true_scores, y_pred_scores = [], [], []
 
     for record in records:
@@ -42,6 +114,8 @@ def calculate_metrics(records: List[Dict[str, Any]]) -> Dict[str, float]:
         pred_scores = record["prediction"] if record["valid"] else None
         exact_correct += int(record["valid"] and pred_scores == true_scores)
         invalid_count += int(not record["valid"])
+        recovered_count += int(record["recovered"] if "recovered" in record
+                               else is_recovered(record.get("raw_output"), record["valid"]))
 
         if record["valid"]:
             criterion_true.extend(true_scores)
@@ -55,38 +129,35 @@ def calculate_metrics(records: List[Dict[str, Any]]) -> Dict[str, float]:
 
     total = len(records)
     elapsed_seconds = sum(float(record.get("generation_seconds", 0.0)) for record in records)
-
-    pearson_corr = float("nan")
-    if len(y_true_scores) > 1:
-        corr_matrix = np.corrcoef(y_true_scores, y_pred_scores)
-        if not np.isnan(corr_matrix[0, 1]):
-            pearson_corr = float(corr_matrix[0, 1])
-
-    qwk = float("nan")
-    if y_true_scores:
-        try:
-            qwk = float(cohen_kappa_score(
-                [int(round(s)) for s in y_true_scores],
-                [int(round(s)) for s in y_pred_scores],
-                weights="quadratic",
-            ))
-        except Exception:
-            pass
+    precision, recall, f1, _ = (
+        precision_recall_fscore_support(criterion_true, criterion_pred, average="binary", zero_division=0)
+        if criterion_true else (float("nan"),) * 4
+    )
+    if len(y_true_scores) > 1 and len(set(y_true_scores)) > 1 and len(set(y_pred_scores)) > 1:
+        pearson = float(np.corrcoef(y_true_scores, y_pred_scores)[0, 1])
+    else:
+        pearson = float("nan")
+    qwk = (float(cohen_kappa_score(y_true_scores, y_pred_scores, weights="quadratic"))
+           if y_true_scores else float("nan"))
 
     return {
         "examples": total,
+        "valid_examples": total - invalid_count,
+        "recovered_output_rate": recovered_count / total if total else 0.0,
         "invalid_output_rate": invalid_count / total if total else 0.0,
         "exact_match_accuracy": exact_correct / total if total else 0.0,
-        "per_criterion_accuracy": accuracy_score(criterion_true, criterion_pred) if criterion_true else 0.0,
-        "precision": precision_score(criterion_true, criterion_pred, zero_division=0) if criterion_true else 0.0,
-        "recall": recall_score(criterion_true, criterion_pred, zero_division=0) if criterion_true else 0.0,
-        "f1": f1_score(criterion_true, criterion_pred, zero_division=0) if criterion_true else 0.0,
+        "per_criterion_accuracy": accuracy_score(criterion_true, criterion_pred) if criterion_true else float("nan"),
+        "precision": float(precision),
+        "recall": float(recall),
+        "f1": float(f1),
         "final_score_exact_accuracy": final_score_exact / total if total else 0.0,
         "final_score_within_one_accuracy": final_score_within_one / total if total else 0.0,
         "final_score_mae": float(np.mean(final_score_errors)) if final_score_errors else float("nan"),
-        "final_score_rmse": float(np.sqrt(np.mean(np.square(final_score_errors)))) if final_score_errors else float("nan"),
-        "final_score_pearson": pearson_corr,
+        "final_score_rmse": (float(np.sqrt(np.mean(np.square(final_score_errors))))
+                             if final_score_errors else float("nan")),
+        "final_score_pearson": pearson,
         "final_score_qwk": qwk,
+        **question_metrics(records),
         "generation_minutes": elapsed_seconds / 60,
         "mean_generation_seconds": elapsed_seconds / total if total else float("nan"),
     }
@@ -100,7 +171,21 @@ def grader_view(record: Dict[str, Any]) -> Dict[str, Any]:
         "valid": record["grader_valid"],
         "prediction": record["grader_prediction"],
         "predicted_final_score": record["grader_final_score"],
+        "recovered": is_recovered(record.get("raw_output"), record["grader_valid"]),
         "generation_seconds": seconds.get("grader", record.get("generation_seconds", 0.0)),
+    }
+
+
+def vote_view(record: Dict[str, Any]) -> Dict[str, Any]:
+    """The final grade after the vote. It counts as recovered when any grade that went into
+    the vote (grader, evaluator, re-grade) was recovered."""
+    return {
+        **record,
+        "recovered": any(
+            is_recovered(record.get(raw), bool(record.get(valid)))
+            for raw, valid in (("raw_output", "grader_valid"), ("evaluator_raw_output", "evaluator_valid"),
+                               ("regrade_raw_output", "regrade_valid"))
+        ),
     }
 
 
@@ -108,7 +193,7 @@ def systems_for(records: List[Dict[str, Any]]) -> Dict[str, Callable[[Dict[str, 
     """'single' is the grading agent alone. 'vote' (the final grade) is added when the run voted."""
     systems = {"single": grader_view if "grader_prediction" in records[0] else (lambda record: record)}
     if "resolution" in records[0]:
-        systems["vote"] = lambda record: record
+        systems["vote"] = vote_view
     return systems
 
 
@@ -137,7 +222,8 @@ def agent_statistics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
         initial = frame["verifier_initial"].dropna()
         final = frame["verifier"].dropna()
         stats.update({
-            "verifier_valid_rate": initial.map(lambda v: v["valid"]).mean() if len(initial) else float("nan"),
+            "verifier_unreadable_rate_initial": _unreadable_rate(initial),
+            "verifier_unreadable_rate_final": _unreadable_rate(final),
             "verifier_pass_rate_initial": _pass_rate(initial),
             "verifier_pass_rate_final": _pass_rate(final),
             "feedback_revised_rate": (frame["feedback_revisions"].fillna(0) > 0).mean(),
@@ -151,19 +237,36 @@ def agent_statistics(records: List[Dict[str, Any]]) -> Dict[str, Any]:
     return stats
 
 
+def verdict_passed(verdict: Optional[Dict[str, Any]]) -> Optional[bool]:
+    """True only for a readable verdict that accepts the feedback. A verdict that could not be
+    read counts as a fail: dropping it would favour feedback that confuses the verifier.
+    None when there is no verdict (the row had no feedback)."""
+    if not verdict:
+        return None
+    return bool(verdict.get("valid") and verdict.get("is_consistent") is True)
+
+
 def _pass_rate(verdicts: pd.Series) -> float:
-    readable = [v["is_consistent"] for v in verdicts if v.get("valid")]
-    return float(np.mean(readable)) if readable else float("nan")
+    passed = [verdict_passed(v) for v in verdicts if v]
+    return float(np.mean(passed)) if passed else float("nan")
 
 
-def evaluate_records(records_by_index: Dict[int, Dict[str, Any]], test_indices_by_seed: Dict[int, List[int]]):
-    """Scores each seed's test rows. Returns (metrics_by_seed, seed_summary, agent_stats) DataFrames."""
+def _unreadable_rate(verdicts: pd.Series) -> float:
+    unreadable = [not v.get("valid") for v in verdicts if v]
+    return float(np.mean(unreadable)) if unreadable else float("nan")
+
+
+def evaluate_records(records_by_index: Dict[int, Dict[str, Any]], test_indices_by_seed: Dict[int, List[int]],
+                     samples: List[Any]):
+    """Scores each seed's test rows. `samples` is the dataset (indexed by dataset_index), for
+    each row's question. Returns (metrics_by_seed, seed_summary, agent_stats) DataFrames."""
     metric_rows, stat_rows = [], []
     for seed, test_indices in test_indices_by_seed.items():
         missing = [index for index in test_indices if index not in records_by_index]
         if missing:
             raise ValueError(f"Seed {seed}: {len(missing)} test rows have no record yet.")
-        seed_records = [records_by_index[index] for index in test_indices]
+        seed_records = [{**records_by_index[index], "question": samples[index].question}
+                        for index in test_indices]
         for name, view in systems_for(seed_records).items():
             metric_rows.append({"split_seed": seed, "system": name,
                                 **calculate_metrics([view(record) for record in seed_records])})
@@ -176,8 +279,8 @@ def evaluate_records(records_by_index: Dict[int, Dict[str, Any]], test_indices_b
     return metrics_by_seed, seed_summary, agent_stats
 
 
-def write_reports(records_by_index, test_indices_by_seed, output_dir: str):
-    metrics_by_seed, seed_summary, agent_stats = evaluate_records(records_by_index, test_indices_by_seed)
+def write_reports(records_by_index, test_indices_by_seed, samples, output_dir: str):
+    metrics_by_seed, seed_summary, agent_stats = evaluate_records(records_by_index, test_indices_by_seed, samples)
     metrics_by_seed.to_csv(os.path.join(output_dir, "metrics_by_seed.csv"), index=False)
     seed_summary.to_csv(os.path.join(output_dir, "metrics_seed_summary.csv"))
     agent_stats.to_csv(os.path.join(output_dir, "agent_stats_by_seed.csv"))

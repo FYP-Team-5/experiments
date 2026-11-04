@@ -19,6 +19,8 @@ Each stage's model is set under `models:` in the experiment config. Stages that 
 
 ## Running
 
+[RUNNING_ON_ORIGAMI.md](RUNNING_ON_ORIGAMI.md) has step-by-step instructions for running the comparison on the Origami cluster. The simplest way is to open [run_comparison.ipynb](run_comparison.ipynb) in a `mynotebook` GPU session and press **Run All**: it runs the four comparison configs, resumes after an interruption, and shows the report.
+
 ```bash
 pip install -r requirements.txt
 
@@ -73,13 +75,13 @@ Each run writes to `outputs/<experiment_name>/<timestamp>/`:
 |---|---|
 | `config_resolved.yaml` | The merged config |
 | `records.jsonl` | One record per row: the final grade (`prediction`, `valid`, `predicted_final_score`), the grading agent's own grade (`grader_*`), every agent's raw output, the feedback before and after verification, the verifier's verdicts, and seconds per agent |
-| `metrics_by_seed.csv` | The 12 grading metrics per seed. A voting run has two systems: `single` (grading agent alone) and `vote` |
+| `metrics_by_seed.csv` | The grading metrics of the qlora Rubrics notebooks, in their order, per seed. A voting run has two systems: `single` (grading agent alone) and `vote` |
 | `metrics_seed_summary.csv` | Mean and std of each metric across seeds |
-| `agent_stats_by_seed.csv` | Agreement, re-grade and change rates, verifier pass rates before and after rewrites, and minutes per agent |
+| `agent_stats_by_seed.csv` | Agreement, re-grade and change rates, verifier pass rates before and after rewrites (an unreadable verdict counts as a fail), how often a verdict was unreadable, and minutes per agent |
 
-`scripts/compare.py` writes `report.md`, `grading_summary.csv`, `grading_paired.csv`, `feedback_paired.csv` and `agent_stats.csv` to `outputs/comparison/report/`.
+`scripts/compare.py` writes `report.md`, `grading_summary.csv`, `grading_by_seed.csv`, `grading_paired.csv`, `feedback_paired.csv` and `agent_stats.csv` to `outputs/comparison/report/`.
 
-`calculate_metrics` in `src/gfv/metrics.py` is the function from the qlora notebooks. Rescoring the notebooks' JSONL output with `scripts/evaluate.py` reproduces their `metrics_by_seed.csv`.
+`calculate_metrics` in `src/gfv/metrics.py` follows the qlora Rubrics notebooks (`evaluate_current_model` and `summarize_question_metrics`): the same metrics in the same order, including `recovered_output_rate` and the question-macro metrics. Its 12 metrics shared with the multi-agent notebooks are computed as they compute them, so rescoring their JSONL output with `scripts/evaluate.py` reproduces their `metrics_by_seed.csv`.
 
 ## Layout
 

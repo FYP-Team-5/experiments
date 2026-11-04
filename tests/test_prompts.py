@@ -93,10 +93,18 @@ def test_every_prompt_template_fills():
 
     from src.gfv.stages.verification import VerificationStage
 
-    prompt = VerificationStage(None, "prompts/verification/consistency_v1.txt", {}).messages(
-        sample, sample.criteria_scores, "Nice work."
+    for path in ("prompts/verification/consistency_v1.txt", "prompts/verification/consistency_v2.txt"):
+        prompt = VerificationStage(None, path, {}).messages(
+            sample, sample.criteria_scores, "Nice work."
+        )[0]["content"]
+        assert '"is_consistent": true | false' in prompt and "Nice work." in prompt
+
+    # v2 shows the verifier the marks the feedback was written for.
+    prompt = VerificationStage(None, "prompts/verification/consistency_v2.txt", {}).messages(
+        sample, [0] * len(sample.criteria), "Nice work."
     )[0]["content"]
-    assert '"is_consistent": true | false' in prompt and "Nice work." in prompt
+    assert "1. [NOT MET] " in prompt and sample.desired_answer.strip() in prompt
+    assert f"Score: 0 out of {len(sample.criteria)}" in prompt
 
 
 def test_format_prompt_reports_missing_values():

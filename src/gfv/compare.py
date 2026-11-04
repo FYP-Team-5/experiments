@@ -23,7 +23,8 @@ import pandas as pd
 from scipy.stats import binomtest
 
 from src.gfv.data import Sample
-from src.gfv.metrics import METRIC_COLUMNS, agent_statistics, evaluate_records, load_records, systems_for
+from src.gfv.metrics import (METRIC_COLUMNS, agent_statistics, evaluate_records, load_records, systems_for,
+                             verdict_passed)
 
 BOOTSTRAP_METRICS = ["exact_match_accuracy", "f1", "final_score_mae", "final_score_qwk"]
 TIMESTAMP = re.compile(r"^\d{8}_\d{6}$")
@@ -67,17 +68,14 @@ def grading_systems(runs: Dict[str, Records]) -> Dict[str, Records]:
 
 def feedback_systems(runs: Dict[str, Records]) -> Dict[str, Dict[int, Optional[bool]]]:
     """'<run>:initial' and '<run>:final' verifier verdicts for every run that verified.
-    A verdict is None when the row had no feedback or the verifier's answer could not be read."""
-
-    def passed(verdict):
-        return verdict["is_consistent"] if verdict and verdict.get("valid") else None
-
+    A verdict the verifier's answer could not be read for counts as a fail; it is None
+    only when the row had no feedback."""
     systems = {}
     for name, records in runs.items():
         if "verifier_initial" not in next(iter(records.values())):
             continue
-        systems[f"{name}:initial"] = {i: passed(r["verifier_initial"]) for i, r in records.items()}
-        systems[f"{name}:final"] = {i: passed(r["verifier"]) for i, r in records.items()}
+        systems[f"{name}:initial"] = {i: verdict_passed(r["verifier_initial"]) for i, r in records.items()}
+        systems[f"{name}:final"] = {i: verdict_passed(r["verifier"]) for i, r in records.items()}
     return systems
 
 
@@ -200,7 +198,7 @@ def compare_feedback(systems: Dict[str, Dict[int, Optional[bool]]], test_indices
     rows = []
     for (name_a, a), (name_b, b) in itertools.combinations(systems.items(), 2):
         for split_seed, indices in test_indices_by_seed.items():
-            # Only rows where both verdicts could be read are paired.
+            # Rows without feedback in either system are left out.
             kept = [i for i in indices if a.get(i) is not None and b.get(i) is not None]
             pass_a = np.array([a[i] for i in kept], dtype=bool)
             pass_b = np.array([b[i] for i in kept], dtype=bool)
@@ -224,12 +222,13 @@ def compare_feedback(systems: Dict[str, Dict[int, Optional[bool]]], test_indices
     return pd.DataFrame(rows)
 
 
-def summaries(runs: Dict[str, Records], test_indices_by_seed: Dict[int, List[int]]
-              ) -> Tuple[pd.DataFrame, pd.DataFrame]:
-    """Per-system metric means and stds across seeds, and per-run agent statistics."""
+def summaries(runs: Dict[str, Records], test_indices_by_seed: Dict[int, List[int]], samples: List[Sample]
+              ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Per-system metric means and stds across seeds, per-run agent statistics, and every
+    system's metrics per seed."""
     metric_frames, stat_frames = [], []
     for name, records in runs.items():
-        metrics_by_seed, _, agent_stats = evaluate_records(records, test_indices_by_seed)
+        metrics_by_seed, _, agent_stats = evaluate_records(records, test_indices_by_seed, samples)
         metrics_by_seed.insert(0, "run", name)
         metric_frames.append(metrics_by_seed)
         stats = agent_stats.loc[["mean"]].copy()
@@ -242,7 +241,7 @@ def summaries(runs: Dict[str, Records], test_indices_by_seed: Dict[int, List[int
     metrics = pd.concat(metric_frames)
     grouped = metrics.groupby(["run", "system"], sort=False)[METRIC_COLUMNS]
     summary = grouped.mean().add_suffix("_mean").join(grouped.std().add_suffix("_std")).reset_index()
-    return summary, pd.concat(stat_frames, ignore_index=True)
+    return summary, pd.concat(stat_frames, ignore_index=True), metrics.reset_index(drop=True)
 
 
 # -------------------------------------------------------------------------- report
@@ -259,20 +258,44 @@ def markdown_table(frame: pd.DataFrame) -> str:
     return "\n".join([header, rule, *body])
 
 
+COUNT_METRICS = {"examples", "valid_examples", "question_count"}
+
+
+def metric_value(metric: str, value: float) -> str:
+    if pd.isna(value):
+        return ""
+    return f"{value:.0f}" if metric in COUNT_METRICS else f"{value:.4f}"
+
+
+def metric_tables(summary: pd.DataFrame, metrics_by_seed: pd.DataFrame) -> List[str]:
+    """Every metric in the Rubrics notebooks' order, one column per system: the average across
+    seeds (their Table 2), then each seed (their Table 1)."""
+    systems = list(dict.fromkeys(summary.run + ":" + summary.system))
+    average = pd.DataFrame({"metric": METRIC_COLUMNS})
+    for system, row in zip(systems, summary.itertuples(index=False)):
+        average[system] = [
+            f"{metric_value(m, getattr(row, m + '_mean'))} ± {metric_value(m, getattr(row, m + '_std'))}"
+            for m in METRIC_COLUMNS
+        ]
+    lines = ["## Grading: every metric, mean ± std across seeds", "", markdown_table(average)]
+    labelled = metrics_by_seed.assign(column=metrics_by_seed.run + ":" + metrics_by_seed.system)
+    for split_seed, rows in labelled.groupby("split_seed", sort=True):
+        table = pd.DataFrame({"metric": METRIC_COLUMNS})
+        for row in rows.itertuples(index=False):
+            table[row.column] = [metric_value(m, getattr(row, m)) for m in METRIC_COLUMNS]
+        lines += ["", f"## Grading: seed {split_seed}", "", markdown_table(table)]
+    return lines
+
+
 def write_report(output_dir: str, summary: pd.DataFrame, agent_stats: pd.DataFrame,
-                 grading: pd.DataFrame, feedback: pd.DataFrame, n_boot: int):
+                 grading: pd.DataFrame, feedback: pd.DataFrame, n_boot: int,
+                 metrics_by_seed: pd.DataFrame):
     os.makedirs(output_dir, exist_ok=True)
     summary.to_csv(os.path.join(output_dir, "grading_summary.csv"), index=False)
+    metrics_by_seed.to_csv(os.path.join(output_dir, "grading_by_seed.csv"), index=False)
     agent_stats.to_csv(os.path.join(output_dir, "agent_stats.csv"), index=False)
     grading.to_csv(os.path.join(output_dir, "grading_paired.csv"), index=False)
     feedback.to_csv(os.path.join(output_dir, "feedback_paired.csv"), index=False)
-
-    def mean_std(metric):
-        return summary.apply(lambda r: f"{r[metric + '_mean']:.4f} ± {r[metric + '_std']:.4f}", axis=1)
-
-    overview = summary[["run", "system"]].copy()
-    for metric in ("exact_match_accuracy", "f1", "final_score_mae", "final_score_qwk", "invalid_output_rate"):
-        overview[metric] = mean_std(metric)
 
     lines = [
         "# Multi-agent comparison",
@@ -281,9 +304,12 @@ def write_report(output_dir: str, summary: pd.DataFrame, agent_stats: pd.DataFra
         "`diff` is B − A; higher is better except for MAE. The interval is a 95% bootstrap "
         f"({n_boot} resamples of whole questions); `*` marks an interval that excludes 0.",
         "",
-        "## Grading: mean ± std across seeds",
+        "The grading metrics are those of the qlora Rubrics notebooks, in their order. "
+        "`recovered_output_rate` is the share of valid grades found inside extra text; for a vote, "
+        "any recovered input grade counts. The `question_macro_*` metrics give every question equal "
+        "weight, and an invalid output fails all of its criteria.",
         "",
-        markdown_table(overview),
+        *metric_tables(summary, metrics_by_seed),
     ]
     if not grading.empty:
         table = grading.assign(
@@ -313,12 +339,14 @@ def write_report(output_dir: str, summary: pd.DataFrame, agent_stats: pd.DataFra
         lines += [
             "", "## Feedback: verifier pass rate, A → B", "",
             "Judged by the pipeline's own verifier (base Qwen3.5-9B), so this is not yet an independent "
-            "measure of feedback quality; score `feedback_initial` and `feedback` with the 27B judge for that.",
+            "measure of feedback quality; score `feedback_initial` and `feedback` with the 27B judge for that. "
+            "A verdict that could not be read counts as a fail; the table below gives how often that happened.",
             "", markdown_table(table.reset_index()),
         ]
     cost_columns = ["run", "rows_processed", "seconds_per_row"] + [
         c for c in agent_stats.columns if c.startswith("generation_minutes_")
-    ] + [c for c in ("verifier_pass_rate_initial", "verifier_pass_rate_final", "feedback_revised_rate")
+    ] + [c for c in ("verifier_pass_rate_initial", "verifier_pass_rate_final",
+                     "verifier_unreadable_rate_initial", "verifier_unreadable_rate_final", "feedback_revised_rate")
          if c in agent_stats.columns]
     lines += ["", "## Agents and cost (mean over seeds; minutes per seed's test split)", "",
               markdown_table(agent_stats[cost_columns])]
