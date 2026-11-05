@@ -1,7 +1,11 @@
 experiment:
   # Question-level 80/10/10 splits, the same as the qlora notebooks. Every row
   # in any seed's test split is processed once; each seed is scored on its own.
-  seeds: [42, 123, 2026]
+  # Seed 42 only: both adapters (SmuFypTeam5/GradingQlora from commit 6ad11d55,
+  # and SmuFypTeam5/feedback) were trained on the seed-42 split, so the test
+  # rows of seeds 123 and 2026 include questions they were trained on.
+  # scripts/compare.py scores the same seeds by default.
+  seeds: [42]
   output_dir: "outputs"
   batch_size: 8                 # halved automatically after a CUDA out-of-memory error
   enable_thinking: false        # every Qwen3.5 run in the qlora repo is non-thinking

@@ -12,7 +12,9 @@ Both methods now run in this repo's pipeline: grade voting is `stages.voting`, f
   - It saw only the score, without the maximum or the criterion marks. It passed 69–75% of feedback on full-mark answers, but only 6–10% on zero-score answers and 1–3% on partial credit, mostly flagging `SCORE_FEEDBACK_MISMATCH` when the feedback named a missing point.
 
   The verifier now uses `consistency_v2.txt` with 1024 tokens. It asks for the JSON only, and shows the score out of the maximum, each criterion's mark and the reference answer. An unreadable verdict now counts as a fail instead of being dropped.
-- **Still to do:** rerun the two feedback configs with the new verifier (RUNNING_ON_ORIGAMI.md, "Rerun the feedback configs"); score the feedback with the 27B judge (B4, C4).
+
+  The QLoRA runs also used the earlier `SmuFypTeam5/GradingQlora` (seed-2026 split), so seeds 42 and 123 included questions it was trained on. The adapter was replaced on 2026-11-05 (commit `6ad11d55`) by one trained on the seed-42 split, like the feedback adapter. The comparison is now scored on seed 42 only, the one split that is clean for both adapters.
+- **Still to do:** rerun `cmp_grading_qlora` with the new adapter and the two feedback configs with the new verifier, on seed 42 (RUNNING_ON_ORIGAMI.md, "Rerun after the verifier fix and the new grading adapter"); score the feedback with the 27B judge (B4, C4).
 
 On the notebook's own sampled run, `scripts/compare.py` already finds that voting changes no grading metric significantly on any seed: every 95% interval includes 0, and McNemar's p is between 0.55 and 1.0.
 
@@ -73,7 +75,7 @@ On this branch, B1 is `configs/experiments/cmp_grading_qlora.yaml`. For B2, the 
 | Setting | Use |
 |---|---|
 | Dataset | `training_data_moh_eng_rubrics.csv` (the copies in both repos are identical; MD5 `089d01d4…`) |
-| Split | Question-level 80/10/10, seeds 42, 123, 2026; test split only (389 / 278 / 396 rows). Both repos already compute the same split. |
+| Split | Question-level 80/10/10, test split only. Seed 42 (389 rows), the split both adapters were trained on; seeds 123 and 2026 (278 / 396 rows) overlap the adapters' training questions. Both repos already compute the same split. |
 | Grader prompt | `prompts/grading/grading_v1.txt` as the system message, numbered criteria in the user message |
 | Grader decoding | Greedy, `max_new_tokens=128`, `enable_thinking=False` |
 | Second-opinion decoding | Sampling at temperature 0.7 (the qlora voting needs some randomness to disagree) |

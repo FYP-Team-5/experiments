@@ -15,7 +15,7 @@ Each stage's model is set under `models:` in the experiment config. Stages that 
 
 ## Data and splits
 
-`data/processed/data.jsonl` is made from `data/training_data_moh_eng_rubrics.csv` by `scripts/convert_csv_to_jsonl.py`. The pipeline uses the question-level 80/10/10 split from the qlora notebooks, with seeds 42, 123 and 2026. It runs every row in any seed's test split once, then scores each seed on its own test rows (389, 278 and 396 rows).
+`data/processed/data.jsonl` is made from `data/training_data_moh_eng_rubrics.csv` by `scripts/convert_csv_to_jsonl.py`. The pipeline uses the question-level 80/10/10 split from the qlora notebooks. `experiment.seeds` in `configs/base.yaml` lists the split seeds; the pipeline runs every row in any seed's test split once, then scores each seed on its own test rows. It is set to seed 42 only (389 test rows), because both adapters were trained on the seed-42 split: the test rows of seeds 123 and 2026 include questions they were trained on. `scripts/compare.py` scores the same seeds unless `--seeds` is given.
 
 ## Running
 

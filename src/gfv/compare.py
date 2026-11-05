@@ -269,22 +269,24 @@ def metric_value(metric: str, value: float) -> str:
 
 def metric_tables(summary: pd.DataFrame, metrics_by_seed: pd.DataFrame) -> List[str]:
     """Every metric in the Rubrics notebooks' order, one column per system: the average across
-    seeds (their Table 2), then each seed (their Table 1)."""
-    systems = list(dict.fromkeys(summary.run + ":" + summary.system))
-    average = pd.DataFrame({"metric": METRIC_COLUMNS})
-    for system, row in zip(systems, summary.itertuples(index=False)):
-        average[system] = [
-            f"{metric_value(m, getattr(row, m + '_mean'))} ± {metric_value(m, getattr(row, m + '_std'))}"
-            for m in METRIC_COLUMNS
-        ]
-    lines = ["## Grading: every metric, mean ± std across seeds", "", markdown_table(average)]
+    seeds (their Table 2), then each seed (their Table 1). With one seed, only the latter."""
+    lines = []
+    if metrics_by_seed.split_seed.nunique() > 1:
+        systems = list(dict.fromkeys(summary.run + ":" + summary.system))
+        average = pd.DataFrame({"metric": METRIC_COLUMNS})
+        for system, row in zip(systems, summary.itertuples(index=False)):
+            average[system] = [
+                f"{metric_value(m, getattr(row, m + '_mean'))} ± {metric_value(m, getattr(row, m + '_std'))}"
+                for m in METRIC_COLUMNS
+            ]
+        lines += ["## Grading: every metric, mean ± std across seeds", "", markdown_table(average), ""]
     labelled = metrics_by_seed.assign(column=metrics_by_seed.run + ":" + metrics_by_seed.system)
     for split_seed, rows in labelled.groupby("split_seed", sort=True):
         table = pd.DataFrame({"metric": METRIC_COLUMNS})
         for row in rows.itertuples(index=False):
             table[row.column] = [metric_value(m, getattr(row, m)) for m in METRIC_COLUMNS]
-        lines += ["", f"## Grading: seed {split_seed}", "", markdown_table(table)]
-    return lines
+        lines += [f"## Grading: seed {split_seed}", "", markdown_table(table), ""]
+    return lines[:-1]
 
 
 def write_report(output_dir: str, summary: pd.DataFrame, agent_stats: pd.DataFrame,

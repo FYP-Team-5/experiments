@@ -18,12 +18,22 @@ from src.gfv.compare import (compare_feedback, compare_grading, feedback_systems
 from src.gfv.data import load_jsonl, question_splits
 
 
+BASE_CONFIG = os.path.join(os.path.dirname(__file__), "..", "configs", "base.yaml")
+
+
+def configured_seeds():
+    """The split seeds the runs use, from configs/base.yaml."""
+    from omegaconf import OmegaConf
+    return [int(seed) for seed in OmegaConf.load(BASE_CONFIG).experiment.seeds]
+
+
 def main():
     parser = argparse.ArgumentParser(description="Paired comparison of finished runs")
     parser.add_argument("runs", nargs="*", help="Run folders containing records.jsonl "
                                                 "(default: every folder in outputs/comparison/)")
     parser.add_argument("--data", default="data/processed/data.jsonl")
-    parser.add_argument("--seeds", type=int, nargs="+", default=[42, 123, 2026])
+    parser.add_argument("--seeds", type=int, nargs="+", default=None,
+                        help="Split seeds to score (default: experiment.seeds in configs/base.yaml)")
     parser.add_argument("--bootstrap", type=int, default=2000, help="Bootstrap resamples")
     parser.add_argument("--out", default="outputs/comparison/report")
     args = parser.parse_args()
@@ -34,10 +44,12 @@ def main():
     if not paths:
         parser.error("No runs found; pass run folders or copy them to outputs/comparison/.")
 
+    seeds = args.seeds or configured_seeds()
     samples = load_jsonl(args.data)
     test_indices_by_seed = {
-        seed: [sample.index for sample in question_splits(samples, seed)["test"]] for seed in args.seeds
+        seed: [sample.index for sample in question_splits(samples, seed)["test"]] for seed in seeds
     }
+    print("Seeds:", ", ".join(str(seed) for seed in seeds))
     runs = load_runs(paths)
     print("Runs:", ", ".join(runs))
 
