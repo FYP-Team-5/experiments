@@ -85,7 +85,6 @@ def test_every_prompt_template_fills():
         "prompts/feedback/answer_rubric_v1.txt",
         "prompts/feedback/answer_rubric_grade_v1.txt",
         "prompts/feedback/key_points_v1.txt",
-        "prompts/feedback/graded_criteria_v1.txt",
     ]
     sample = load_jsonl("data/processed/data_small.jsonl")[0]
     for path in stage_templates:

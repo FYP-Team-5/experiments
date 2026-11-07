@@ -1,0 +1,9 @@
+marks,system,rows,failed,unreadable,covers_missing_points,respects_met_points,faithful_to_student,factually_correct,one_check_only
+given,base:initial,387,70,13,3,6,28,27,50
+gold,base:initial,387,106,8,34,12,50,30,73
+given,base:final,387,67,11,9,7,32,23,42
+gold,base:final,387,104,6,38,14,52,28,69
+given,adapter:initial,387,37,6,0,5,20,10,27
+gold,adapter:initial,387,89,4,40,16,46,17,58
+given,adapter:final,387,40,9,0,4,19,10,29
+gold,adapter:final,387,92,7,40,14,45,15,62

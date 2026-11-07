@@ -27,11 +27,6 @@ def prompt_fields(sample: Sample, criterion_scores: List[int]) -> Dict[str, str]
             f"{number}. {'[MET] ' if met else '[NOT MET] '}{criterion}"
             for number, (criterion, met) in enumerate(zip(sample.criteria, marks), start=1)
         ),
-        # Multi-agent notebook format: "1. [met] ..." / "2. [not met] ..."
-        "graded_criteria": "\n".join(
-            f"{number}. [{'met' if met else 'not met'}] {criterion}"
-            for number, (criterion, met) in enumerate(zip(sample.criteria, marks), start=1)
-        ),
         "met_count": str(sum(marks)),
         "criteria_count": str(len(marks)),
         "score": format_number(score),

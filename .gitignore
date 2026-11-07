@@ -19,12 +19,9 @@ conda/
 .DS_Store
 
 # Data & Large Files
-# Ignore all data contents except the initial raw CSV file
 data/synthetic/
-data/raw/*
-!data/raw/training_data_moh_eng_rubrics.csv
 
-# Outputs, Logs, & Experiment Results
+# Outputs & Logs (the reports worth keeping are copied to results/)
 outputs/
 logs/
 

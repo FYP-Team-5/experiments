@@ -83,6 +83,8 @@ Each run writes to `outputs/<experiment_name>/<timestamp>/`:
 
 `scripts/compare.py` writes `report.md`, `grading_summary.csv`, `grading_by_seed.csv`, `grading_paired.csv`, `feedback_paired.csv` and `agent_stats.csv` to `outputs/comparison/report/`.
 
+`outputs/` is not committed. The reports of the comparison run that MULTI_AGENT_COMPARISON.md describes are copied to [results/comparison/](results/comparison/): `report/` from `scripts/compare.py` and `judge_27b/` from the judge notebook, without the per-row `records.jsonl` and `judgements.jsonl`. [side_by_side_examples.md](side_by_side_examples.md) shows the feedback on a few of its rows.
+
 `calculate_metrics` in `src/gfv/metrics.py` follows the qlora Rubrics notebooks (`evaluate_current_model` and `summarize_question_metrics`): the same metrics in the same order, including `recovered_output_rate` and the question-macro metrics. Its 12 metrics shared with the multi-agent notebooks are computed as they compute them, so rescoring their JSONL output with `scripts/evaluate.py` reproduces their `metrics_by_seed.csv`.
 
 ## Layout
@@ -94,6 +96,7 @@ Each run writes to `outputs/<experiment_name>/<timestamp>/`:
 | `configs/models/` | Base model, grading adapter, feedback adapter, local test model |
 | `prompts/` | System prompts and templates. Placeholders are `{name}`; other braces are left as they are |
 | `src/gfv/` | Data, model wrapper, parsers, metrics, pipeline and one module per stage |
+| `results/comparison/` | Committed reports of the comparison run: grading and verifier report, 27B judge report |
 | `notebooks/multi_agent_vote/` | The original grade-voting notebooks and their results, from the qlora repo's `feat/multi-agent` branch |
 | `scripts/` | Run one experiment, run a list, convert the CSV, score a records file, compare runs |
 | `slurm/` | Cluster jobs (`run_one.sbatch` per config, `run_stage.sbatch` per list), `submit.sh` to submit one config, experiment lists |

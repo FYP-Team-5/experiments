@@ -34,7 +34,7 @@ Both methods now run in this repo's pipeline: grade voting is `stages.voting`, f
   - **End to end (gold), grading errors dominate.** On the 307 rows where the QLoRA grader's marks match the dataset's, given and gold results are the same (adapter 0.941, base 0.870). On the 80 rows where they differ, only 11–19% pass: the feedback explains the wrong grade. The adapter's lead under gold is about 3–4 points, and most intervals include 0.
   - **Conclusion:** grading adapter → feedback adapter, without the verification loop, is the best and cheapest pipeline. Further gains have to come from grading.
 
-  The full report, with pass rates per check, by outcome, paired tests, agreement with the 9B verifier and failures per check, is `outputs/comparison/judge_27b/report.md`.
+  The full report, with pass rates per check, by outcome, paired tests, agreement with the 9B verifier and failures per check, is [results/comparison/judge_27b/report.md](results/comparison/judge_27b/report.md); the grading and 9B-verifier comparison is [results/comparison/report/report.md](results/comparison/report/report.md). [side_by_side_examples.md](side_by_side_examples.md) shows the feedback on the rows of the feedback repo's examples, with each rewrite and the 9B verifier's verdicts.
 
 On the notebook's own sampled run, `scripts/compare.py` already finds that voting changes no grading metric significantly on any seed: every 95% interval includes 0, and McNemar's p is between 0.55 and 1.0.
 
