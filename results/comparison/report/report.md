@@ -6,27 +6,27 @@ The grading metrics are those of the qlora Rubrics notebooks, in their order. `r
 
 ## Grading: seed 42
 
-| metric | cmp_grading_base:single | cmp_grading_base:vote | cmp_grading_qlora:single | cmp_grading_qlora:vote | cmp_feedback_base:single | cmp_feedback_adapter:single |
-|---|---|---|---|---|---|---|
-| examples | 389 | 389 | 389 | 389 | 389 | 389 |
-| valid_examples | 389 | 389 | 387 | 387 | 387 | 387 |
-| recovered_output_rate | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
-| invalid_output_rate | 0.0000 | 0.0000 | 0.0051 | 0.0051 | 0.0051 | 0.0051 |
-| exact_match_accuracy | 0.7326 | 0.7352 | 0.7892 | 0.7789 | 0.7892 | 0.7892 |
-| per_criterion_accuracy | 0.8675 | 0.8675 | 0.8992 | 0.8959 | 0.8992 | 0.8992 |
-| precision | 0.8833 | 0.8772 | 0.8654 | 0.8607 | 0.8654 | 0.8654 |
-| recall | 0.8745 | 0.8825 | 0.9679 | 0.9679 | 0.9679 | 0.9679 |
-| f1 | 0.8789 | 0.8798 | 0.9137 | 0.9112 | 0.9137 | 0.9137 |
-| final_score_exact_accuracy | 0.7326 | 0.7404 | 0.7943 | 0.7841 | 0.7943 | 0.7943 |
-| final_score_within_one_accuracy | 0.9717 | 0.9743 | 0.9794 | 0.9820 | 0.9794 | 0.9794 |
-| final_score_mae | 0.3111 | 0.3008 | 0.2248 | 0.2326 | 0.2248 | 0.2248 |
-| final_score_rmse | 0.6783 | 0.6669 | 0.5498 | 0.5522 | 0.5498 | 0.5498 |
-| final_score_pearson | 0.8123 | 0.8180 | 0.8766 | 0.8771 | 0.8766 | 0.8766 |
-| final_score_qwk | 0.8051 | 0.8111 | 0.8642 | 0.8635 | 0.8642 | 0.8642 |
-| question_count | 10 | 10 | 10 | 10 | 10 | 10 |
-| question_macro_exact_match_accuracy | 0.7484 | 0.7491 | 0.8095 | 0.8073 | 0.8095 | 0.8095 |
-| question_macro_per_criterion_accuracy | 0.8665 | 0.8663 | 0.8900 | 0.8934 | 0.8900 | 0.8900 |
-| question_macro_criterion_f1 | 0.8571 | 0.8571 | 0.8842 | 0.8876 | 0.8842 | 0.8842 |
+| metric | cmp_grading_base:single | cmp_grading_base:vote | cmp_grading_qlora:single | cmp_grading_qlora:vote |
+|---|---|---|---|---|
+| examples | 389 | 389 | 389 | 389 |
+| valid_examples | 389 | 389 | 387 | 387 |
+| recovered_output_rate | 0.0000 | 0.0000 | 0.0000 | 0.0000 |
+| invalid_output_rate | 0.0000 | 0.0000 | 0.0051 | 0.0051 |
+| exact_match_accuracy | 0.7326 | 0.7352 | 0.7892 | 0.7789 |
+| per_criterion_accuracy | 0.8675 | 0.8675 | 0.8992 | 0.8959 |
+| precision | 0.8833 | 0.8772 | 0.8654 | 0.8607 |
+| recall | 0.8745 | 0.8825 | 0.9679 | 0.9679 |
+| f1 | 0.8789 | 0.8798 | 0.9137 | 0.9112 |
+| final_score_exact_accuracy | 0.7326 | 0.7404 | 0.7943 | 0.7841 |
+| final_score_within_one_accuracy | 0.9717 | 0.9743 | 0.9794 | 0.9820 |
+| final_score_mae | 0.3111 | 0.3008 | 0.2248 | 0.2326 |
+| final_score_rmse | 0.6783 | 0.6669 | 0.5498 | 0.5522 |
+| final_score_pearson | 0.8123 | 0.8180 | 0.8766 | 0.8771 |
+| final_score_qwk | 0.8051 | 0.8111 | 0.8642 | 0.8635 |
+| question_count | 10 | 10 | 10 | 10 |
+| question_macro_exact_match_accuracy | 0.7484 | 0.7491 | 0.8095 | 0.8073 |
+| question_macro_per_criterion_accuracy | 0.8665 | 0.8663 | 0.8900 | 0.8934 |
+| question_macro_criterion_f1 | 0.8571 | 0.8571 | 0.8842 | 0.8876 |
 
 ## Grading: paired differences
 

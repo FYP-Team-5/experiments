@@ -225,12 +225,19 @@ def compare_feedback(systems: Dict[str, Dict[int, Optional[bool]]], test_indices
 def summaries(runs: Dict[str, Records], test_indices_by_seed: Dict[int, List[int]], samples: List[Sample]
               ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     """Per-system metric means and stds across seeds, per-run agent statistics, and every
-    system's metrics per seed."""
+    system's metrics per seed.
+
+    Grading metrics come only from runs that voted, when there are any. A run without a
+    vote only repeats the single grader of a grading run (the feedback runs use the
+    QLoRA grader of cmp_grading_qlora), so its column would be a duplicate. Agent
+    statistics cover every run."""
+    voted = {name for name, records in runs.items() if "resolution" in next(iter(records.values()))}
     metric_frames, stat_frames = [], []
     for name, records in runs.items():
         metrics_by_seed, _, agent_stats = evaluate_records(records, test_indices_by_seed, samples)
-        metrics_by_seed.insert(0, "run", name)
-        metric_frames.append(metrics_by_seed)
+        if not voted or name in voted:
+            metrics_by_seed.insert(0, "run", name)
+            metric_frames.append(metrics_by_seed)
         stats = agent_stats.loc[["mean"]].copy()
         stats.insert(0, "run", name)
         # Seconds per row over every row the run processed, not per seed.

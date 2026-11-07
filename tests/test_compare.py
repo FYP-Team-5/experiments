@@ -77,7 +77,11 @@ def test_compare_pipeline_runs(tmp_path):
     assert (feedback.a_value == 0).all() and (feedback.b_value == 1).all()
 
     summary, agent_stats, metrics_by_seed = summaries(runs, seeds, samples)
-    assert set(summary.run) == {"cmp_grading_fake", "cmp_feedback_fake"}
+    # The feedback run has no vote, so its grader would only repeat a grading run's column.
+    assert set(summary.run) == {"cmp_grading_fake"}
+    assert set(agent_stats.run) == {"cmp_grading_fake", "cmp_feedback_fake"}
+    feedback_only, _, _ = summaries({"cmp_feedback_fake": runs["cmp_feedback_fake"]}, seeds, samples)
+    assert set(feedback_only.run) == {"cmp_feedback_fake"}
     write_report(str(tmp_path / "report"), summary, agent_stats, grading, feedback, 50, metrics_by_seed)
     report = (tmp_path / "report" / "report.md").read_text(encoding="utf-8")
     assert "## Grading: paired differences" in report and "## Feedback: verifier pass rate" in report
