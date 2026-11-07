@@ -14,7 +14,27 @@ Both methods now run in this repo's pipeline: grade voting is `stages.voting`, f
   The verifier now uses `consistency_v2.txt` with 1024 tokens. It asks for the JSON only, and shows the score out of the maximum, each criterion's mark and the reference answer. An unreadable verdict now counts as a fail instead of being dropped.
 
   The QLoRA runs also used the earlier `SmuFypTeam5/GradingQlora` (seed-2026 split), so seeds 42 and 123 included questions it was trained on. The adapter was replaced on 2026-11-05 (commit `6ad11d55`) by one trained on the seed-42 split, like the feedback adapter. The comparison is now scored on seed 42 only, the one split that is clean for both adapters.
-- **Still to do:** rerun `cmp_grading_qlora` with the new adapter and the two feedback configs with the new verifier, on seed 42 (RUNNING_ON_ORIGAMI.md, "Rerun after the verifier fix and the new grading adapter"); score the feedback with the 27B judge (B4, C4).
+- **Second run on the cluster (2026-11-05), seed 42:**
+  - **The verifier fix worked.** 0.0–0.8% of verdicts are unreadable. Pass rates before → after rewrites are 0.589 → 0.763 for base feedback and 0.689 → 0.815 for the feedback adapter. Feedback on partial-credit answers now passes 27–59%.
+  - **The new grading adapter was not applied.** Its weights are named after Qwen3.5's multimodal layout (`model.language_model.layers.N`), which matches nothing in the `AutoModelForCausalLM` the pipeline loads. PEFT only warned, and `cmp_grading_qlora` graded like the base model (0.735 exact match vs the adapter's own 0.784). `load_adapter` in `src/gfv/llm.py` now renames the weights and checks that every weight loaded.
+- **Third run on the cluster (2026-11-06), seed 42, with the adapter loading fixed:** QLoRA single grader 0.789 exact match (the adapter's own evaluation: 0.784), against 0.733 for the base model (McNemar p = 0.026). Voting changes nothing for either. The feedback adapter passes the 9B verifier more often than base feedback, before (0.724 vs 0.574) and after rewrites (0.827 vs 0.757).
+- **Feedback judged by Qwen3.5-27B (2026-11-07):** `judge_feedback_27b.ipynb` with `src/gfv/judge.py` (B4, C4) judged the third run's feedback with the feedback repo's judge and checks. It judged each feedback against the marks it was written for (**given**, the QLoRA grader's) and against the dataset's marks (**gold**). Of 1,270 distinct judgements, 36 (2.8%) are unreadable: the judge used up its 8,192 tokens while thinking. They count as fails, as in the feedback repo. Leaving them out changes no conclusion.
+
+  | Pass rate on all four checks (387 rows) | Base feedback | Feedback adapter |
+  |---|---|---|
+  | given, before rewrites | 0.819 | **0.904** |
+  | given, after the 9B verifier's rewrites | 0.827 | 0.897 |
+  | gold, before rewrites | 0.726 | 0.770 |
+  | gold, after rewrites | 0.731 | 0.762 |
+  | Format checks clean | 0.468 | 0.997 |
+
+  - **The judge reproduces the feedback repo's result.** That result (base 79.7%, adapter 89.7%, format 44.2% and 100%) had feedback written for and judged against the same marks, as with **given** here.
+  - **The feedback adapter writes better feedback.** Under **given** it beats base by about 8 points before rewrites (95% CI [+0.012, +0.136], McNemar 15 vs 48, p < 0.001) and after them. Most of the gain is on partial-credit answers (0.887 vs 0.745), and in factual accuracy (0.959 vs 0.897) and faithfulness to the student's answer (0.933 vs 0.894).
+  - **The verify-and-rewrite loop adds nothing.** Rewrites move the pass rate by +0.008 for base and −0.008 for the adapter, neither significant. On the rewritten rows alone: base 0.697 → 0.715 (165 rows), adapter 0.832 → 0.804 (107 rows). The 9B verifier agrees with the 27B judge on only 65–80% of rows and fails much feedback the judge passes (30% of base's first drafts). Its pass-rate gains above are the verifier accepting its own rewrites, not better feedback.
+  - **End to end (gold), grading errors dominate.** On the 307 rows where the QLoRA grader's marks match the dataset's, given and gold results are the same (adapter 0.941, base 0.870). On the 80 rows where they differ, only 11–19% pass: the feedback explains the wrong grade. The adapter's lead under gold is about 3–4 points, and most intervals include 0.
+  - **Conclusion:** grading adapter → feedback adapter, without the verification loop, is the best and cheapest pipeline. Further gains have to come from grading.
+
+  The full report, with pass rates per check, by outcome, paired tests, agreement with the 9B verifier and failures per check, is `outputs/comparison/judge_27b/report.md`.
 
 On the notebook's own sampled run, `scripts/compare.py` already finds that voting changes no grading metric significantly on any seed: every 95% interval includes 0, and McNemar's p is between 0.55 and 1.0.
 
@@ -66,7 +86,7 @@ These issues stop the full pipeline from running, or make it measure something d
 | B3 | Its grading system prompt says "Do not include explanations **in the final answer**" and "Do not include any text **after the final JSON array**". The QLoRA notebooks and `grading_v1.txt` say "Do not include explanations." and "…before or after the JSON array." The single-grader score on seed 42 differs: exact match 0.725 here vs 0.740 in `Rubrics/Qlora Comparison/qlora_evaluation_comparison.csv`. | Use the text of `prompts/grading/grading_v1.txt` in both pipelines. |
 | B4 | Feedback quality is never scored; only the JSON parse rate (99%) is reported. | Score the feedback with the judge described in C4. |
 
-On this branch, B1 is `configs/experiments/cmp_grading_qlora.yaml`. For B2, the voting stage samples by default (`stages.voting.decoding`). For B3, every config uses `prompts/grading/grading_v1.txt` for both the grader and the evaluator. B4 is still open.
+On this branch, B1 is `configs/experiments/cmp_grading_qlora.yaml`. For B2, the voting stage samples by default (`stages.voting.decoding`). For B3, every config uses `prompts/grading/grading_v1.txt` for both the grader and the evaluator. B4 is `judge_feedback_27b.ipynb`, which scores the feedback runs in this pipeline.
 
 ## C. A shared evaluation protocol
 
@@ -142,12 +162,12 @@ The gains seen so far are tiny. With the evaluator sampling, the 3-agent vote ch
 
 ## Checklist
 
-- [x] A1–A13 fixed in experiments (tested with a fake model; not yet run on a GPU)
+- [x] A1–A13 fixed in experiments (tested with a fake model, then run on the cluster)
 - [x] B3: both methods use the `grading_v1.txt` prompt
-- [x] Both methods write the C3 record format for seeds 42, 123, 2026
+- [x] Both methods write the C3 record format (scored on seed 42)
 - [x] QLoRA-grader configs added (single and 3-agent)
-- [ ] The four `cmp_*` configs run on the cluster
-- [ ] Feedback from every run scored with the 27B judge
-- [ ] Verifier checked against the judge
+- [x] The four `cmp_*` configs run on the cluster (third run, 2026-11-06)
+- [x] Feedback from every run scored with the 27B judge (2026-11-07)
+- [x] Verifier checked against the judge
 - [x] Paired tests, confidence intervals and time per row implemented (`scripts/compare.py`)
-- [ ] Comparison report produced from the cluster runs
+- [x] Comparison report produced from the cluster runs

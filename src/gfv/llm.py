@@ -9,6 +9,61 @@ def is_out_of_memory(error: BaseException) -> bool:
     return type(error).__name__ == "OutOfMemoryError"
 
 
+def adapter_key_map(saved_keys, model_keys) -> Dict[str, str]:
+    """Maps each weight name in a saved adapter to the name the loaded model uses.
+
+    Qwen3.5 loaded as the multimodal model names its text layers
+    `model.language_model.layers.N`; loaded with AutoModelForCausalLM, as here, they are
+    `model.layers.N`. An adapter trained on the first (SmuFypTeam5/GradingQlora since
+    commit 6ad11d55) matches nothing in the second, and PEFT only warns: its LoRA layers
+    stay at their zero initialisation and the model grades like the base model.
+    Raises if a saved weight has no match or a LoRA weight in the model gets none.
+    """
+    def normalise(key):
+        return key.replace("language_model.", "")
+
+    by_name = {normalise(key): key for key in model_keys}
+    mapping = {key: by_name[normalise(key)] for key in saved_keys if normalise(key) in by_name}
+    unmatched = sorted(set(saved_keys) - set(mapping))
+    uncovered = sorted(set(model_keys) - set(mapping.values()))
+    if unmatched or uncovered:
+        raise ValueError(
+            f"The adapter does not fit the model: {len(unmatched)} saved weights match no layer "
+            f"(e.g. {unmatched[:2]}), {len(uncovered)} LoRA weights get no value (e.g. {uncovered[:2]})."
+        )
+    return mapping
+
+
+def load_adapter(base_model, adapter_id: str):
+    """PeftModel.from_pretrained, then a check that every adapter weight really loaded.
+    Weights saved under the multimodal layer names are renamed to the model's own."""
+    import torch
+    from peft import PeftModel, get_peft_model_state_dict, set_peft_model_state_dict
+    from peft.utils import load_peft_weights
+
+    model = PeftModel.from_pretrained(base_model, adapter_id)
+    saved = load_peft_weights(adapter_id)
+    mapping = adapter_key_map(saved, get_peft_model_state_dict(model))
+    renamed = sum(name != target for name, target in mapping.items())
+    if renamed:
+        print(f"Adapter {adapter_id}: renaming {renamed} weights to the model's layer names", flush=True)
+        result = set_peft_model_state_dict(model, {mapping[name]: value for name, value in saved.items()})
+        if getattr(result, "unexpected_keys", None):
+            raise ValueError(f"Adapter weights not loaded: {result.unexpected_keys[:2]}")
+
+    loaded = get_peft_model_state_dict(model)
+    wrong = []
+    for name, value in saved.items():
+        current = loaded[mapping[name]].detach().cpu()
+        if not torch.equal(current, value.to(current.dtype).cpu()):
+            wrong.append(name)
+    if wrong:
+        raise ValueError(f"Adapter {adapter_id}: {len(wrong)} of {len(saved)} weights differ from the file "
+                         f"after loading (e.g. {wrong[:2]}).")
+    print(f"Adapter {adapter_id}: all {len(saved)} weights loaded", flush=True)
+    return model
+
+
 def clear_cuda_cache():
     import gc
     import torch
@@ -59,9 +114,7 @@ class LLMWrapper:
         )
 
         if cfg["model"].get("adapter_id"):
-            from peft import PeftModel
-
-            model = PeftModel.from_pretrained(base_model, cfg["model"]["adapter_id"])
+            model = load_adapter(base_model, cfg["model"]["adapter_id"])
         else:
             model = base_model
         model.eval()

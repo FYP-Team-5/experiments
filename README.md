@@ -79,6 +79,8 @@ Each run writes to `outputs/<experiment_name>/<timestamp>/`:
 | `metrics_seed_summary.csv` | Mean and std of each metric across seeds |
 | `agent_stats_by_seed.csv` | Agreement, re-grade and change rates, verifier pass rates before and after rewrites (an unreadable verdict counts as a fail), how often a verdict was unreadable, and minutes per agent |
 
+[judge_feedback_27b.ipynb](judge_feedback_27b.ipynb) scores the feedback runs with the feedback repo's Qwen3.5-27B judge (vLLM, a 48 GB GPU) and writes `report.md` and CSVs to `outputs/comparison/judge_27b/`. Its prompts and checks are in `src/gfv/judge.py`, copied from the feedback repo's notebooks; RUNNING_ON_ORIGAMI.md has the steps.
+
 `scripts/compare.py` writes `report.md`, `grading_summary.csv`, `grading_by_seed.csv`, `grading_paired.csv`, `feedback_paired.csv` and `agent_stats.csv` to `outputs/comparison/report/`.
 
 `calculate_metrics` in `src/gfv/metrics.py` follows the qlora Rubrics notebooks (`evaluate_current_model` and `summarize_question_metrics`): the same metrics in the same order, including `recovered_output_rate` and the question-macro metrics. Its 12 metrics shared with the multi-agent notebooks are computed as they compute them, so rescoring their JSONL output with `scripts/evaluate.py` reproduces their `metrics_by_seed.csv`.
