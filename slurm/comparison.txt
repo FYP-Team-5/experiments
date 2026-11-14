@@ -1,4 +1,4 @@
-# Comparison of the two multi-agent methods (MULTI_AGENT_COMPARISON.md, C2)
+# Comparison of the two multi-agent methods
 configs/experiments/cmp_grading_base.yaml
 configs/experiments/cmp_grading_qlora.yaml
 configs/experiments/cmp_feedback_base.yaml

@@ -1,4 +1,4 @@
-"""Compares finished runs on the same test rows (MULTI_AGENT_COMPARISON.md, C5).
+"""Compares finished runs on the same test rows.
 
 Every comparison is paired: both systems are scored on the same rows of one
 seed's test split. For each pair and seed it reports

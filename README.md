@@ -1,28 +1,90 @@
 # Grading, feedback and verification experiments
 
-A config-driven pipeline that grades short answers against rubric criteria, writes feedback, and optionally checks it. It runs both multi-agent methods the team has built, on the same data and with the same metrics, so they can be compared. [MULTI_AGENT_COMPARISON.md](MULTI_AGENT_COMPARISON.md) explains the comparison.
+A config-driven pipeline that grades short answers against rubric criteria and writes feedback on them. It was built to answer one question: **do multi-agent methods (grade voting, feedback verification) improve on a single grader and a single feedback writer?**
+
+It runs both multi-agent methods the team built on the same data, with the same prompts and metrics, so they can be compared.
+
+## Findings
+
+Measured on 389 test rows from questions that no model was trained on.
+
+| Question | Result |
+|---|---|
+| Does fine-tuning the grader help? | **Yes.** Exact match rises from 0.733 to 0.789, and F1 from 0.879 to 0.914. |
+| Does a 3-agent grade vote help? | **No.** It changes exact match by +0.003 (base grader) and −0.010 (fine-tuned grader), neither significant. |
+| Does the fine-tuned feedback adapter help? | **Yes.** 90.4% of its feedback passes an independent Qwen3.5-27B judge, against 81.9% for the base model. |
+| Does a verify-and-rewrite loop help? | **No.** It changes the judge's pass rate by less than 1 point. |
+
+**Conclusion:** the best and cheapest pipeline is the grading adapter followed by the feedback adapter, with no voting and no verification loop.
+
+## Where to find things
+
+| If you want | Read |
+|---|---|
+| Every grading metric, with confidence intervals and significance tests | [results/comparison/report/report.md](results/comparison/report/report.md) |
+| The 27B judge's results on the feedback | [results/comparison/judge_27b/report.md](results/comparison/judge_27b/report.md) |
+| Actual feedback from both models on ten test rows | [results/comparison/side_by_side_examples.md](results/comparison/side_by_side_examples.md) |
+
+```
+experiments/
+├── configs/                 base.yaml, one file per experiment, one per model
+├── prompts/                 Prompt text for grading, feedback and verification
+├── src/gfv/                 The pipeline: data, model wrapper, parsers, metrics, one module per stage
+├── scripts/                 Run an experiment, convert data, score records, compare runs
+├── slurm/                   Cluster job scripts
+├── tests/                   Pipeline tests with a fake model (no GPU needed)
+├── data/                    The dataset, as CSV and as the JSONL the pipeline reads
+├── results/comparison/      Committed reports of the final comparison run
+└── notebooks/
+    ├── run_comparison.ipynb     Runs the four comparison configs and shows the report
+    ├── judge_feedback_27b.ipynb Scores the feedback with the Qwen3.5-27B judge
+    └── multi_agent_vote/        The original grade-voting notebooks and their results
+```
 
 ## Pipeline
 
-For each row, these agents run in order. All of them except the grader can be switched off in the config.
+For each row, these agents run in order. All except the grader can be switched off in the config.
 
-1. **Grading** (`stages.grading`): marks each criterion 0 or 1. Its prompt is the one the grading adapter `SmuFypTeam5/GradingQlora` was trained on.
-2. **Voting** (`stages.voting`): the grade-voting method from [notebooks/multi_agent_vote/](notebooks/multi_agent_vote/). An evaluation agent grades again with sampling. If its marks differ from the grader's, a third grade runs, and each criterion takes the majority mark.
-3. **Feedback** (`stages.feedback`): writes feedback on the final marks. The default prompt is the one the feedback adapter `SmuFypTeam5/feedback` was trained on.
-4. **Verification** (`stages.verification`): an LLM judge checks that the score and the feedback are consistent with each other, the student's answer and the rubric. Rejected feedback is rewritten with the judge's notes, up to `max_regenerations` times.
+| Stage | What it does |
+|---|---|
+| 1. Grading | Marks each rubric criterion 0 or 1. Its prompt is the one the grading adapter `SmuFypTeam5/GradingQlora` was trained on. |
+| 2. Voting | A second agent grades again with sampling. If the two disagree, a third grade runs and each criterion takes the majority mark. |
+| 3. Feedback | Writes feedback on the final marks. The default prompt is the one the feedback adapter `SmuFypTeam5/feedback` was trained on. |
+| 4. Verification | A judge agent checks that the score and the feedback agree with each other, the student's answer and the rubric. Rejected feedback is rewritten with the judge's notes, up to `max_regenerations` times. |
 
-Each stage's model is set under `models:` in the experiment config. Stages that use the same model config share one copy of the weights.
+All stages use Qwen3.5-9B, with or without an adapter. Each stage's model is set under `models:` in the experiment config, and stages with the same model config share one copy of the weights.
 
-## Data and splits
+## Data
 
-`data/processed/data.jsonl` is made from `data/training_data_moh_eng_rubrics.csv` by `scripts/convert_csv_to_jsonl.py`. The pipeline uses the question-level 80/10/10 split from the qlora notebooks. `experiment.seeds` in `configs/base.yaml` lists the split seeds; the pipeline runs every row in any seed's test split once, then scores each seed on its own test rows. It is set to seed 42 only (389 test rows), because both adapters were trained on the seed-42 split: the test rows of seeds 123 and 2026 include questions they were trained on. `scripts/compare.py` scores the same seeds unless `--seeds` is given.
+`data/training_data_moh_eng_rubrics.csv` has 3,778 graded answers to 95 questions. `scripts/convert_csv_to_jsonl.py` turns it into `data/processed/data.jsonl`, which the pipeline reads.
+
+The pipeline uses the same question-level 80/10/10 split as the adapters' training notebooks. Results are scored on the seed-42 test split only (389 rows), because both adapters were trained on the seed-42 training split. The seeds are set by `experiment.seeds` in `configs/base.yaml`.
+
+## Experiments
+
+| Config | What it runs |
+|---|---|
+| `cmp_grading_base` | Base grader, single vs 3-agent vote |
+| `cmp_grading_qlora` | QLoRA grader, single vs 3-agent vote |
+| `cmp_feedback_base` | QLoRA grader → base feedback → verifier, up to 2 rewrites |
+| `cmp_feedback_adapter` | QLoRA grader → feedback adapter → verifier, up to 2 rewrites |
+| `exp_01_prompt_v1` | QLoRA grader → base feedback from the rubric only → verifier (audit only) |
+| `exp_02_prompt_with_grade_v1` | QLoRA grader → base feedback from the rubric and score → verifier (audit only) |
+| `exp_local_test` | Every stage with Qwen3.5-2B on 5 rows, on CPU |
+
+The four `cmp_*` configs are the comparison reported above.
 
 ## Running
 
-[RUNNING_ON_ORIGAMI.md](RUNNING_ON_ORIGAMI.md) has step-by-step instructions for running the comparison on the Origami cluster. The simplest way is to open [run_comparison.ipynb](run_comparison.ipynb) in a `mynotebook` GPU session and press **Run All**: it runs the four comparison configs, resumes after an interruption, and shows the report.
+The simplest way is to open [notebooks/run_comparison.ipynb](notebooks/run_comparison.ipynb) in a GPU session and press **Run All**. It runs the four comparison configs, resumes after an interruption, and shows the report.
+
+From the command line:
 
 ```bash
 pip install -r requirements.txt
+
+# Tests (fake model, no GPU needed)
+python -m pytest tests
 
 # One experiment
 PYTHONPATH=. python scripts/run_stage.py --config configs/experiments/cmp_grading_qlora.yaml
@@ -31,73 +93,37 @@ PYTHONPATH=. python scripts/run_stage.py --config configs/experiments/cmp_gradin
 PYTHONPATH=. python scripts/run_stage.py --config configs/experiments/cmp_grading_qlora.yaml \
     --output_dir outputs/cmp_grading_qlora/20261103_120000
 
-# The comparison on the cluster: submit each config as its own job. The
-# CS480G3 account allows 2 submitted jobs, so submit two, then the next one
-# after one finishes. Results go to outputs/comparison/<config>/;
-# resubmitting a config resumes it.
+# On the cluster: one Slurm job per config (resubmitting resumes it)
 bash slurm/submit.sh cmp_grading_base
-bash slurm/submit.sh cmp_grading_qlora
-bash slurm/submit.sh cmp_feedback_base        # after one of the above finishes
-bash slurm/submit.sh cmp_feedback_adapter
 
-# Every experiment in a list, in a single job
-sbatch slurm/run_stage.sbatch                                                  # slurm/experiments.txt
-sbatch --export=ALL,EXPERIMENT_LIST_FILE=slurm/comparison.txt slurm/run_stage.sbatch
+# Compare finished runs (no GPU needed)
+python scripts/compare.py
 
-# Compare finished runs (no GPU needed): paired differences per seed with
-# bootstrap intervals by question, McNemar tests, and cost per agent
-python scripts/compare.py                                # every run in outputs/comparison/
-
-# Score an existing records file, including the notebooks' JSONL output
+# Score an existing records file, including the original notebooks' JSONL output
 python scripts/evaluate.py --records path/to/records.jsonl --out path/to/report
-
-# Tests (fake model, no GPU needed)
-python -m pytest tests
 ```
 
-## Experiments
-
-| Config | What it runs |
-|---|---|
-| `exp_01_prompt_v1` | QLoRA grader → base feedback from the rubric only → verifier (audit only) |
-| `exp_02_prompt_with_grade_v1` | QLoRA grader → base feedback from the rubric and score → verifier (audit only) |
-| `cmp_grading_base` | Base grader, single vs 3-agent vote |
-| `cmp_grading_qlora` | QLoRA grader, single vs 3-agent vote |
-| `cmp_feedback_base` | QLoRA grader → base feedback → verifier, up to 2 rewrites |
-| `cmp_feedback_adapter` | QLoRA grader → feedback adapter → verifier, up to 2 rewrites |
-| `exp_local_test` | Every stage with Qwen3.5-2B on 5 rows, on CPU |
+[notebooks/judge_feedback_27b.ipynb](notebooks/judge_feedback_27b.ipynb) scores the feedback runs with the Qwen3.5-27B judge. It needs vLLM and a 48 GB GPU.
 
 ## Outputs
 
-Each run writes to `outputs/<experiment_name>/<timestamp>/`:
+Each run writes to `outputs/<experiment_name>/<timestamp>/` (the comparison runs to `outputs/comparison/<config>/`):
 
 | File | Contents |
 |---|---|
 | `config_resolved.yaml` | The merged config |
-| `records.jsonl` | One record per row: the final grade (`prediction`, `valid`, `predicted_final_score`), the grading agent's own grade (`grader_*`), every agent's raw output, the feedback before and after verification, the verifier's verdicts, and seconds per agent |
-| `metrics_by_seed.csv` | The grading metrics of the qlora Rubrics notebooks, in their order, per seed. A voting run has two systems: `single` (grading agent alone) and `vote` |
+| `records.jsonl` | One record per row: the final grade, the grading agent's own grade, every agent's raw output, the feedback before and after verification, the verifier's verdicts, and seconds per agent |
+| `metrics_by_seed.csv` | The grading metrics per seed. A voting run has two systems: `single` (grading agent alone) and `vote` |
 | `metrics_seed_summary.csv` | Mean and std of each metric across seeds |
-| `agent_stats_by_seed.csv` | Agreement, re-grade and change rates, verifier pass rates before and after rewrites (an unreadable verdict counts as a fail), how often a verdict was unreadable, and minutes per agent |
+| `agent_stats_by_seed.csv` | Agreement, re-grade and change rates, verifier pass rates before and after rewrites, and minutes per agent |
 
-[judge_feedback_27b.ipynb](judge_feedback_27b.ipynb) scores the feedback runs with the feedback repo's Qwen3.5-27B judge (vLLM, a 48 GB GPU) and writes `report.md` and CSVs to `outputs/comparison/judge_27b/`. Its prompts and checks are in `src/gfv/judge.py`, copied from the feedback repo's notebooks; RUNNING_ON_ORIGAMI.md has the steps.
+`scripts/compare.py` writes its report to `outputs/comparison/report/`, and the judge notebook to `outputs/comparison/judge_27b/`.
 
-`scripts/compare.py` writes `report.md`, `grading_summary.csv`, `grading_by_seed.csv`, `grading_paired.csv`, `feedback_paired.csv` and `agent_stats.csv` to `outputs/comparison/report/`.
+`outputs/` is not committed. The reports of the final comparison run are copied to [results/comparison/](results/comparison/), without the per-row `records.jsonl` and `judgements.jsonl`.
 
-`outputs/` is not committed. The reports of the comparison run that MULTI_AGENT_COMPARISON.md describes are copied to [results/comparison/](results/comparison/): `report/` from `scripts/compare.py` and `judge_27b/` from the judge notebook, without the per-row `records.jsonl` and `judgements.jsonl`. [side_by_side_examples.md](side_by_side_examples.md) shows the feedback on a few of its rows.
+## Related repositories
 
-`calculate_metrics` in `src/gfv/metrics.py` follows the qlora Rubrics notebooks (`evaluate_current_model` and `summarize_question_metrics`): the same metrics in the same order, including `recovered_output_rate` and the question-macro metrics. Its 12 metrics shared with the multi-agent notebooks are computed as they compute them, so rescoring their JSONL output with `scripts/evaluate.py` reproduces their `metrics_by_seed.csv`.
-
-## Layout
-
-| Path | Contents |
+| Repo | Relation |
 |---|---|
-| `configs/base.yaml` | Defaults for every experiment: seeds, decoding, prompts, which stages run |
-| `configs/experiments/` | One file per experiment; overrides `base.yaml` |
-| `configs/models/` | Base model, grading adapter, feedback adapter, local test model |
-| `prompts/` | System prompts and templates. Placeholders are `{name}`; other braces are left as they are |
-| `src/gfv/` | Data, model wrapper, parsers, metrics, pipeline and one module per stage |
-| `results/comparison/` | Committed reports of the comparison run: grading and verifier report, 27B judge report |
-| `notebooks/multi_agent_vote/` | The original grade-voting notebooks and their results, from the qlora repo's `feat/multi-agent` branch |
-| `scripts/` | Run one experiment, run a list, convert the CSV, score a records file, compare runs |
-| `slurm/` | Cluster jobs (`run_one.sbatch` per config, `run_stage.sbatch` per list), `submit.sh` to submit one config, experiment lists |
-| `tests/` | Pipeline tests with a fake model, and prompt checks against the adapters' training prompts |
+| `qlora` | Trains the grading adapter. The grading metrics and the split here follow its Rubrics notebooks, and the grade-voting notebooks come from its `feat/multi-agent` branch. |
+| `feedback` | Trains the feedback adapter. The 27B judge's prompts and checks in `src/gfv/judge.py` are copied from its notebooks, and `tests/test_judge.py` checks that they still match. |

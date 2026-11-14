@@ -1,7 +1,7 @@
 # Grading comparison, base model: one run gives both "single" (grading agent
 # alone) and "vote" (3-agent majority) metrics on the same rows.
 # Same setup as notebooks/multi_agent_vote/ with sampling, except for the
-# grading prompt (prompts/grading/grading_v1.txt, see MULTI_AGENT_COMPARISON.md B3).
+# grading prompt (prompts/grading/grading_v1.txt).
 defaults:
   - configs/base.yaml
 

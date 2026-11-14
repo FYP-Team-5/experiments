@@ -1,7 +1,7 @@
 experiment:
   # Question-level 80/10/10 splits, the same as the qlora notebooks. Every row
   # in any seed's test split is processed once; each seed is scored on its own.
-  # Seed 42 only: both adapters (SmuFypTeam5/GradingQlora from commit 6ad11d55,
+  # Seed 42 only: both adapters (SmuFypTeam5/GradingQlora since 2026-11-05,
   # and SmuFypTeam5/feedback) were trained on the seed-42 split, so the test
   # rows of seeds 123 and 2026 include questions they were trained on.
   # scripts/compare.py scores the same seeds by default.

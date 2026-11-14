@@ -15,7 +15,7 @@ dataset's. Each feedback is judged twice: against the marks it was written for (
 good the feedback is) and against the dataset's marks (`gold`, the end-to-end result, which
 the reference used). Where the two agree the prompts are identical and are judged once.
 
-`judge_feedback_27b.ipynb` builds the items, judges them with vLLM, then calls
+`notebooks/judge_feedback_27b.ipynb` builds the items, judges them with vLLM, then calls
 `results_frame`, `summary_tables`, `paired_tables` and `write_report`.
 """
 import hashlib

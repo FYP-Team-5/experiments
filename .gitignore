@@ -21,6 +21,9 @@ conda/
 # Data & Large Files
 data/synthetic/
 
+# Internal working notes
+docs/
+
 # Outputs & Logs (the reports worth keeping are copied to results/)
 outputs/
 logs/

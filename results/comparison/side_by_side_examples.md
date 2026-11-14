@@ -1,11 +1,11 @@
 # Base vs feedback adapter in the comparison pipeline: side-by-side examples
 
-The rows of the feedback repo's side-by-side examples (`runs/side_by_side_examples.md` there), plus two more on the same questions, from the third comparison run (`cmp_feedback_base` and `cmp_feedback_adapter`, seed-42 test split). Two things differ from the feedback repo:
+The rows of the feedback repo's side-by-side examples (`Results/side_by_side_examples.md` there), plus two more on the same questions, from the third comparison run (`cmp_feedback_base` and `cmp_feedback_adapter`, seed-42 test split). Two things differ from the feedback repo:
 
 - The feedback is written for the **QLoRA grader's marks**, not the dataset's. The key points below are the grader's; where the dataset disagrees, it is shown in brackets.
 - Each feedback is checked by the **9B verifier**, which can reject it and ask for a rewrite, up to two times. A draft rejected after the second rewrite is kept anyway. Only the first and the last draft are saved.
 
-Judge verdicts are from the Qwen3.5-27B judge (`judge_feedback_27b.ipynb`, results in [results/comparison/judge_27b/](results/comparison/judge_27b/)), against the marks the feedback was written for. Feedback is quoted verbatim; Markdown characters such as `**` and backticks are escaped, so they show exactly as the model wrote them.
+Judge verdicts are from the Qwen3.5-27B judge (`notebooks/judge_feedback_27b.ipynb`, results in [judge_27b/](judge_27b/)), against the marks the feedback was written for. Feedback is quoted verbatim; Markdown characters such as `**` and backticks are escaped, so they show exactly as the model wrote them.
 
 | 387 rows | Base | Adapter | Base after rewrites | Adapter after rewrites |
 |---|---|---|---|---|
